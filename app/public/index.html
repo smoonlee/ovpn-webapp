@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenVPN Client Generator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 2em;
+      background-color: #f9f9f9;
+    }
+
+    h1 {
+      margin-bottom: 1em;
+    }
+
+    form {
+      display: inline-block;
+      text-align: left;
+      padding: 1em 2em;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    label {
+      display: block;
+      margin: 1em 0;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.5em;
+      margin-top: 0.25em;
+      box-sizing: border-box;
+    }
+
+    button {
+      padding: 0.75em 1.5em;
+      font-size: 1em;
+      background-color: #0078d4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #005ea2;
+    }
+
+    h2 {
+      margin-top: 2em;
+    }
+
+    pre {
+      text-align: left;
+      display: inline-block;
+      background: #f5f5f5;
+      padding: 1em;
+      border-radius: 4px;
+      max-width: 90vw;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>OpenVPN Client Certificate Generator</h1>
+
+  <form id="generate-form">
+    <label>
+      Client Name:
+      <input type="text" id="clientName" required />
+    </label>
+
+    <label>
+      Server Name:
+      <select id="serverName" required>
+        <option value="">-- Select Server --</option>
+        <option value="exos">exos (20.4.208.94)</option>
+        <option value="matrix">matrix (132.220.32.199)</option>
+        <option value="atimo">atimo (132.220.15.55)</option>
+      </select>
+    </label>
+
+    <label>
+      Customer Network (optional):
+      <input type="text" id="customerNetwork" />
+    </label>
+
+    <label>
+      Azure Subnet (optional):
+      <input type="text" id="azureSubnet" />
+    </label>
+
+    <button type="submit">Generate</button>
+  </form>
+
+  <h2>Result:</h2>
+  <pre id="result"></pre>
+
+  <script>
+    document.getElementById("generate-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const clientName = document.getElementById("clientName").value.trim();
+      const serverName = document.getElementById("serverName").value;
+      const customerNetwork = document.getElementById("customerNetwork").value.trim();
+      const azureSubnet = document.getElementById("azureSubnet").value.trim();
+
+      const resultEl = document.getElementById("result");
+      resultEl.textContent = "Generating...";
+
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientName, serverName, customerNetwork, azureSubnet }),
+        });
+
+        const data = await response.json();
+
+        if (data.logs) {
+          console.group("🔧 OpenVPN Generation Logs");
+          data.logs.forEach((line) => console.log(line));
+          console.groupEnd();
+        }
+
+        if (data.error) {
+          alert("Error: " + data.error);
+          resultEl.textContent = "❌ Error occurred. See console for details.";
+          return;
+        }
+
+        const output =
+          "--- CA Certificate ---\n" +
+          data.ca.slice(0, 200) + "...\n\n" +
+          "--- Client Certificate ---\n" +
+          data.cert.slice(0, 200) + "...\n\n" +
+          "--- Client Key ---\n" +
+          data.key.slice(0, 200) + "...";
+
+        resultEl.textContent = output;
+      } catch (err) {
+        console.error("❌ Fetch error:", err);
+        alert("Network error. See console.");
+        resultEl.textContent = "";
+      }
+    });
+  </script>
+</body>
+</html>
