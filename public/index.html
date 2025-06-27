@@ -20,16 +20,16 @@
     <input type="text" id="customerNetwork" placeholder="10.10.10.0/24">
   </label>
 
+  <label>Azure Subnet (e.g. 10.5.0.0/24)
+    <input type="text" id="azureSubnet" placeholder="10.5.0.0/24">
+  </label>
+
   <label>Select VPN Server
     <select id="server">
       <option value="135.236.23.132">Exos (135.236.23.132)</option>
       <option value="132.220.32.199">Matrix (132.220.32.199)</option>
       <option value="132.220.15.55">Atimo (132.220.15.55)</option>
     </select>
-  </label>
-
-  <label>Port
-    <input type="number" id="port" placeholder="1194" required>
   </label>
 
   <button onclick="generate()">Generate .ovpn File</button>
@@ -40,10 +40,10 @@
     async function generate() {
       const clientName = document.getElementById("clientName").value;
       const customerNetwork = document.getElementById("customerNetwork").value;
+      const azureSubnet = document.getElementById("azureSubnet").value;
       const server = document.getElementById("server").value;
-      const port = document.getElementById("port").value;
 
-      if (!clientName || !server || !port) {
+      if (!clientName || !server) {
         alert("Please fill in all required fields.");
         return;
       }
@@ -51,7 +51,12 @@
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientName, serverName: getServerKey(server), customerNetwork })
+        body: JSON.stringify({
+          clientName,
+          serverName: getServerKey(server),
+          customerNetwork,
+          azureSubnet
+        })
       });
 
       if (!res.ok) {
@@ -65,7 +70,7 @@
 client
 dev tun
 proto udp
-remote ${server} ${port}
+remote ${server} 1194
 
 resolv-retry infinite
 nobind

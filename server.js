@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static("public"));
 app.use(bodyParser.json({ limit: "1mb" }));
 
-// VPN server details
+// VPN server lookup
 const vpnHosts = {
   exos: { host: "135.236.23.132", username: "appsvc_ovpn" },
   matrix: { host: "132.220.32.199", username: "appsvc_ovpn" },
@@ -31,34 +31,30 @@ async function getSshPrivateKey() {
   return secret.value;
 }
 
-// Log file configuration
+// Logging to file
 const logDir = "/var/log/ovpn-web";
 const logFile = path.join(logDir, "generate.log");
 
 function logToFile(message) {
   const timestamp = new Date().toISOString();
-  const entry = `[${timestamp}] ${message}\n`;
-
+  const line = `[${timestamp}] ${message}\n`;
   try {
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-    fs.appendFileSync(logFile, entry);
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(logFile, line);
   } catch (err) {
-    console.error("Log write failed:", err.message);
+    console.error("⚠️ Failed to write log:", err.message);
   }
 }
 
-// API route
+// Main endpoint
 app.post("/api/generate", async (req, res) => {
-  const { clientName, serverName, customerNetwork } = req.body;
-
+  const { clientName, serverName, customerNetwork, azureSubnet } = req.body;
   logToFile(
-    `➡️ Request received: clientName=${clientName}, serverName=${serverName}, customerNetwork=${customerNetwork}`
+    `📥 Request: clientName=${clientName}, serverName=${serverName}, customerNetwork=${customerNetwork}, azureSubnet=${azureSubnet}`
   );
 
   if (!clientName || !serverName || !vpnHosts[serverName]) {
-    logToFile(`❌ Invalid parameters`);
+    logToFile("❌ Invalid request parameters");
     return res
       .status(400)
       .json({ error: "Missing or invalid clientName/serverName" });
@@ -68,23 +64,23 @@ app.post("/api/generate", async (req, res) => {
 
   try {
     const sshPrivateKey = await getSshPrivateKey();
-    logToFile(`🔐 SSH private key retrieved from Key Vault`);
+    logToFile("🔐 SSH private key retrieved from Key Vault");
 
     await ssh.connect({ host, username, privateKey: sshPrivateKey });
     logToFile(`✅ SSH connected to ${host} as ${username}`);
 
-    const scriptPath = `/etc/openvpn/generate-client.sh`;
+    const scriptPath = "/etc/openvpn/generate-client.sh";
     const certPath = `/etc/openvpn/client-certs/${clientName}`;
-    const command = `bash ${scriptPath} ${clientName} ${
+
+    const command = `bash ${scriptPath} ${clientName} "${
       customerNetwork || ""
-    }`.trim();
-
-    logToFile(`▶️ Running script: ${command}`);
+    }" "${azureSubnet || ""}"`.trim();
+    logToFile(`▶️ Executing: ${command}`);
     const { stdout, stderr } = await ssh.execCommand(command);
-    if (stderr) logToFile(`⚠️ Script stderr: ${stderr}`);
-    if (stdout) logToFile(`ℹ️ Script stdout: ${stdout}`);
+    if (stdout) logToFile(`ℹ️ stdout: ${stdout}`);
+    if (stderr) logToFile(`⚠️ stderr: ${stderr}`);
 
-    // Retrieve certs
+    // Read cert files
     const ca = (await ssh.execCommand(`cat ${certPath}/ca.crt`)).stdout.trim();
     const cert = (
       await ssh.execCommand(`cat ${certPath}/${clientName}.crt`)
@@ -93,25 +89,25 @@ app.post("/api/generate", async (req, res) => {
       await ssh.execCommand(`cat ${certPath}/${clientName}.key`)
     ).stdout.trim();
 
-    if (!ca || !cert || !key) {
-      throw new Error("One or more cert files are missing or empty.");
-    }
+    if (!ca || !cert || !key)
+      throw new Error("Cert contents are empty or missing");
 
-    logToFile(`✅ Certs retrieved successfully for ${clientName}`);
+    logToFile(`✅ Certs fetched successfully for ${clientName}`);
     res.json({ ca, cert, key });
   } catch (err) {
-    console.error("❌ Error:", err);
+    console.error("❌ Error during generation:", err);
     logToFile(`❌ Exception: ${err.message}`);
     res
       .status(500)
       .json({ error: "Internal error while generating certificates." });
   } finally {
     ssh.dispose();
-    logToFile(`🔌 SSH session closed\n`);
+    logToFile("🔌 SSH connection closed\n");
   }
 });
 
+// Startup
 app.listen(PORT, () => {
-  console.log(`🚀 Server listening on http://localhost:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
   logToFile("🟢 Server started");
 });
