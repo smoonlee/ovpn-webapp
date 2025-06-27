@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OpenVPN Config Generator</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; }
+    label, input, select { display: block; width: 100%; margin-top: 0.5rem; }
+    button { margin-top: 1rem; padding: 0.5rem; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>OpenVPN Config Generator</h1>
+
+  <label>Client Name
+    <input type="text" id="clientName" placeholder="client1" required>
+  </label>
+
+  <label>Customer Network (e.g. 10.10.10.0/24)
+    <input type="text" id="customerNetwork" placeholder="10.10.10.0/24">
+  </label>
+
+  <label>Select VPN Server
+    <select id="server">
+      <option value="135.236.23.132">Exos (135.236.23.132)</option>
+      <option value="132.220.32.199">Matrix (132.220.32.199)</option>
+      <option value="132.220.15.55">Atimo (132.220.15.55)</option>
+    </select>
+  </label>
+
+  <label>Port
+    <input type="number" id="port" placeholder="1194" required>
+  </label>
+
+  <button onclick="generate()">Generate .ovpn File</button>
+
+  <a id="downloadLink" style="display:none; margin-top: 1rem;">Download client.ovpn</a>
+
+  <script>
+    async function generate() {
+      const clientName = document.getElementById("clientName").value;
+      const customerNetwork = document.getElementById("customerNetwork").value;
+      const server = document.getElementById("server").value;
+      const port = document.getElementById("port").value;
+
+      if (!clientName || !server || !port) {
+        alert("Please fill in all required fields.");
+        return;
+      }
+
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientName, serverName: getServerKey(server), customerNetwork })
+      });
+
+      if (!res.ok) {
+        alert("Error generating certs");
+        return;
+      }
+
+      const { ca, cert, key } = await res.json();
+
+      const config = `
+client
+dev tun
+proto udp
+remote ${server} ${port}
+
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+mute-replay-warnings
+
+cipher AES-256-CBC
+verb 4
+mssfix 1360
+tun-mtu 1400
+pull-filter ignore "tun-mtu"
+pull-filter ignore "mssfix"
+allow-pull-fqdn
+
+<ca>
+${ca}
+</ca>
+
+<cert>
+${cert}
+</cert>
+
+<key>
+${key}
+</key>
+`.trim();
+
+      const blob = new Blob([config], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.getElementById("downloadLink");
+
+      link.href = url;
+      link.download = `${clientName}.ovpn`;
+      link.textContent = `Download ${clientName}.ovpn`;
+      link.style.display = 'inline';
+    }
+
+    function getServerKey(ip) {
+      if (ip === "135.236.23.132") return "exos";
+      if (ip === "132.220.32.199") return "matrix";
+      if (ip === "132.220.15.55") return "atimo";
+      return "unknown";
+    }
+  </script>
+</body>
+</html>
