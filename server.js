@@ -53,11 +53,15 @@ function logToFile(message) {
 app.post("/api/generate", async (req, res) => {
   const { clientName, serverName, customerNetwork } = req.body;
 
-  logToFile(`➡️ Request received: clientName=${clientName}, serverName=${serverName}, customerNetwork=${customerNetwork}`);
+  logToFile(
+    `➡️ Request received: clientName=${clientName}, serverName=${serverName}, customerNetwork=${customerNetwork}`
+  );
 
   if (!clientName || !serverName || !vpnHosts[serverName]) {
     logToFile(`❌ Invalid parameters`);
-    return res.status(400).json({ error: "Missing or invalid clientName/serverName" });
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid clientName/serverName" });
   }
 
   const { host, username } = vpnHosts[serverName];
@@ -71,7 +75,9 @@ app.post("/api/generate", async (req, res) => {
 
     const scriptPath = `/etc/openvpn/generate-client.sh`;
     const certPath = `/etc/openvpn/client-certs/${clientName}`;
-    const command = `bash ${scriptPath} ${clientName} ${customerNetwork || ""}`.trim();
+    const command = `bash ${scriptPath} ${clientName} ${
+      customerNetwork || ""
+    }`.trim();
 
     logToFile(`▶️ Running script: ${command}`);
     const { stdout, stderr } = await ssh.execCommand(command);
@@ -80,8 +86,12 @@ app.post("/api/generate", async (req, res) => {
 
     // Retrieve certs
     const ca = (await ssh.execCommand(`cat ${certPath}/ca.crt`)).stdout.trim();
-    const cert = (await ssh.execCommand(`cat ${certPath}/${clientName}.crt`)).stdout.trim();
-    const key = (await ssh.execCommand(`cat ${certPath}/${clientName}.key`)).stdout.trim();
+    const cert = (
+      await ssh.execCommand(`cat ${certPath}/${clientName}.crt`)
+    ).stdout.trim();
+    const key = (
+      await ssh.execCommand(`cat ${certPath}/${clientName}.key`)
+    ).stdout.trim();
 
     if (!ca || !cert || !key) {
       throw new Error("One or more cert files are missing or empty.");
@@ -92,7 +102,9 @@ app.post("/api/generate", async (req, res) => {
   } catch (err) {
     console.error("❌ Error:", err);
     logToFile(`❌ Exception: ${err.message}`);
-    res.status(500).json({ error: "Internal error while generating certificates." });
+    res
+      .status(500)
+      .json({ error: "Internal error while generating certificates." });
   } finally {
     ssh.dispose();
     logToFile(`🔌 SSH session closed\n`);
@@ -100,4 +112,6 @@ app.post("/api/generate", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server listening on http://localhost:${PORT}`
+  console.log(`🚀 Server listening on http://localhost:${PORT}`);
+  logToFile("🟢 Server started");
+});
