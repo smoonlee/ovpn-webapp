@@ -21,10 +21,22 @@ const vpnHosts = {
   atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
 };
 
-// Azure Key Vault setup
+const { DefaultAzureCredential } = require("@azure/identity");
+const { SecretClient } = require("@azure/keyvault-secrets");
+
+// ✅ Inject your UMI Client ID from an environment variable
+const managedIdentityClientId = process.env.MANAGED_IDENTITY_CLIENT_ID;
+
 const keyVaultName = process.env.KEYVAULT_NAME || "kv-ovpn-webapp-dev";
 const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
-const secretClient = new SecretClient(vaultUrl, new DefaultAzureCredential());
+
+// ✅ Use UMI-aware credential
+const credential = new DefaultAzureCredential({
+  managedIdentityClientId: managedIdentityClientId,
+});
+
+// ✅ SecretClient using UMI credential
+const secretClient = new SecretClient(vaultUrl, credential);
 
 async function getSshPrivateKey() {
   const secret = await secretClient.getSecret("ssh-private-key");
