@@ -7,7 +7,6 @@ const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 
 const app = express();
-const ssh = new NodeSSH();
 const PORT = process.env.PORT || 3000;
 
 // Static frontend hosting
@@ -21,21 +20,18 @@ const vpnHosts = {
   atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
 };
 
-const { DefaultAzureCredential } = require("@azure/identity");
-const { SecretClient } = require("@azure/keyvault-secrets");
-
-// ✅ Inject your UMI Client ID from an environment variable
+// Managed Identity Client ID (for User-Assigned Managed Identity)
 const managedIdentityClientId = process.env.MANAGED_IDENTITY_CLIENT_ID;
 
+// Azure Key Vault info
 const keyVaultName = process.env.KEYVAULT_NAME || "kv-ovpn-webapp-dev";
 const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
 
-// ✅ Use UMI-aware credential
+// Create credential once
 const credential = new DefaultAzureCredential({
   managedIdentityClientId: managedIdentityClientId,
 });
 
-// ✅ SecretClient using UMI credential
 const secretClient = new SecretClient(vaultUrl, credential);
 
 async function getSshPrivateKey() {
@@ -43,7 +39,7 @@ async function getSshPrivateKey() {
   return secret.value;
 }
 
-// Logging to file
+// Logging
 const logDir = "/var/log/ovpn-web";
 const logFile = path.join(logDir, "generate.log");
 
@@ -58,7 +54,7 @@ function logToFile(message) {
   }
 }
 
-// Main endpoint
+// Main API endpoint
 app.post("/api/generate", async (req, res) => {
   const { clientName, serverName, customerNetwork, azureSubnet } = req.body;
   logToFile(
@@ -74,6 +70,8 @@ app.post("/api/generate", async (req, res) => {
 
   const { host, username } = vpnHosts[serverName];
 
+  const ssh = new NodeSSH(); // create new ssh client per request
+
   try {
     const sshPrivateKey = await getSshPrivateKey();
     logToFile("🔐 SSH private key retrieved from Key Vault");
@@ -88,6 +86,7 @@ app.post("/api/generate", async (req, res) => {
       customerNetwork || ""
     }" "${azureSubnet || ""}"`.trim();
     logToFile(`▶️ Executing: ${command}`);
+
     const { stdout, stderr } = await ssh.execCommand(command);
     if (stdout) logToFile(`ℹ️ stdout: ${stdout}`);
     if (stderr) logToFile(`⚠️ stderr: ${stderr}`);
@@ -105,6 +104,7 @@ app.post("/api/generate", async (req, res) => {
       throw new Error("Cert contents are empty or missing");
 
     logToFile(`✅ Certs fetched successfully for ${clientName}`);
+
     res.json({ ca, cert, key });
   } catch (err) {
     console.error("❌ Error during generation:", err);
@@ -118,7 +118,7 @@ app.post("/api/generate", async (req, res) => {
   }
 });
 
-// Startup
+// Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
   logToFile("🟢 Server started");
