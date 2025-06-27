@@ -16,7 +16,7 @@ app.use(bodyParser.json({ limit: "1mb" }));
 
 // VPN server lookup
 const vpnHosts = {
-  exos: { host: "135.236.23.132", username: "appsvc_ovpn" },
+  exos: { host: "20.4.208.94", username: "appsvc_ovpn" },
   matrix: { host: "132.220.32.199", username: "appsvc_ovpn" },
   atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
 };
