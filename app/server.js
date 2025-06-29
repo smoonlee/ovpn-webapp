@@ -240,23 +240,15 @@ app.post("/connect", async (req, res) => {
 
       // Add IP route for client network via tun0
       await writeToLog(
-        `Adding IP route for client network: ${customerNetworkInfo.network}/${
-          customerNetwork.split("/")[1]
-        }`
+        `Adding IP route for client network: ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]}`
       );
       await execCommand(
-        `ip route add ${customerNetworkInfo.network}/${
-          customerNetwork.split("/")[1]
-        } dev tun0`
+        `ip route add ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]} dev tun0`
       );
 
       // Read generated certificates
-      const clientKey = await execCommand(
-        `cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`
-      );
-      const clientCert = await execCommand(
-        `cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`
-      );
+      const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
+      const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
       const caCert = await execCommand("cat /etc/openvpn/easy-rsa/pki/ca.crt");
 
       // Close the connection
