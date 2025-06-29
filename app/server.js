@@ -221,6 +221,10 @@ app.post("/connect", async (req, res) => {
         );
       };
 
+      // Convert CIDR notations to network/mask format
+      const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
+      const azureSubnetInfo = cidrToNetworkAndMask(azureSubnet);
+
       // Create logging directory if it doesn't exist
       console.log("[Debug] Creating initial logging directory");
       await execCommand("mkdir -p /var/log/ovpnsetup");
@@ -255,9 +259,6 @@ app.post("/connect", async (req, res) => {
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
 
       // Create CCD profile
-      const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
-      const azureSubnetInfo = cidrToNetworkAndMask(azureSubnet);
-
       const ccdContent = [
         `ifconfig-push ${customerNetworkInfo.network} ${customerNetworkInfo.mask}`,
         `push "route ${azureSubnetInfo.network} ${azureSubnetInfo.mask}"`,
