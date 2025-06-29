@@ -186,13 +186,9 @@ app.post("/connect", async (req, res) => {
               reject(new Error(timeoutError));
             }, TIMEOUT_MS);
 
-            stream.on("data", (data) => {
-              output += data;
-            });
+            stream.on("data", (data) => { output += data;});
 
-            stream.stderr.on("data", (data) => {
-              output += data;
-            });
+            stream.stderr.on("data", (data) => { output += data; });
 
             stream.on("close", () => {
               clearTimeout(timeoutId);
