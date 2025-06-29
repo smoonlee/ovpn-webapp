@@ -75,10 +75,11 @@ async function connectSSH(serverIP, privateKey) {
 
 // Connect endpoint to establish SSH connection
 app.post('/connect', async (req, res) => {
-  const { server, keyName } = req.body;
+  const { server } = req.body;
+  const keyName = process.env.SSH_SECRET_NAME;
   
   if (!server || !keyName) {
-    return res.status(400).json({ error: 'Server and key name are required' });
+    return res.status(400).json({ error: 'Server name and SSH_SECRET_NAME environment variable are required' });
   }
 
   const serverIP = serverIPs[server];
