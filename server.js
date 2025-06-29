@@ -20,6 +20,10 @@ const vpnHosts = {
   atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
 };
 
+//
+console.log("Using MANAGED_IDENTITY_CLIENT_ID:", process.env.MANAGED_IDENTITY_CLIENT_ID);
+console.log("Using KEYVAULT_NAME:", process.env.KEYVAULT_NAME);
+
 // Azure Key Vault info
 const keyVaultName = process.env.KEYVAULT_NAME;
 const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
