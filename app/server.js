@@ -7,6 +7,31 @@ const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 const { Client } = require('ssh2');
 
+// Utility function to convert CIDR to network and mask
+function cidrToNetworkAndMask(cidr) {
+  const [ip, bits] = cidr.split('/');
+  const numBits = parseInt(bits, 10);
+  const maskParts = [];
+  
+  for (let i = 0; i < 4; i++) {
+    if (i * 8 < numBits) {
+      if ((i + 1) * 8 <= numBits) {
+        maskParts.push(255);
+      } else {
+        const remainingBits = numBits - (i * 8);
+        maskParts.push(256 - Math.pow(2, 8 - remainingBits));
+      }
+    } else {
+      maskParts.push(0);
+    }
+  }
+
+  return {
+    network: ip,
+    mask: maskParts.join('.')
+  };
+}
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -94,8 +119,71 @@ app.post('/connect', async (req, res) => {
     // Establish SSH connection
     const connection = await connectSSH(serverIP, sshKey);
     
-    // You might want to store the connection object in a session or handle it as needed
-    res.json({ message: 'Successfully connected', server: serverIP });
+    // Execute commands to create certificates and CCD profile
+    try {
+      const { customerName, customerNetwork, azureSubnet } = req.body;
+      if (!customerName || !customerNetwork || !azureSubnet) {
+        throw new Error('Customer name, customer network, and Azure subnet are required');
+      }
+
+      // Create a function to execute commands and handle their output
+      const execCommand = (cmd) => {
+        return new Promise((resolve, reject) => {
+          connection.exec(cmd, (err, stream) => {
+            if (err) reject(err);
+            
+            let output = '';
+            stream.on('data', (data) => {
+              output += data;
+            });
+            stream.stderr.on('data', (data) => {
+              output += data;
+            });
+            stream.on('close', () => {
+              resolve(output);
+            });
+          });
+        });
+      };
+
+      // Execute certificate creation commands
+      console.log(`Creating certificates for customer: ${customerName}`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa gen-req ${customerName} nopass`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa sign-req client ${customerName}`);
+      
+      // Create CCD profile
+      const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
+      const azureSubnetInfo = cidrToNetworkAndMask(azureSubnet);
+      
+      const ccdContent = [
+        `ifconfig-push ${customerNetworkInfo.network} ${customerNetworkInfo.mask}`,
+        `push "route ${azureSubnetInfo.network} ${azureSubnetInfo.mask}"`
+      ].join('\n');
+      
+      await execCommand(`echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`);
+      
+      // Read generated certificates
+      const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
+      const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
+      const caCert = await execCommand('cat /etc/openvpn/easy-rsa/pki/ca.crt');
+      
+      // Close the connection
+      connection.end();
+      
+      res.json({
+        message: 'Successfully created certificates and CCD profile',
+        server: serverIP,
+        certificates: {
+          clientKey: clientKey.trim(),
+          clientCert: clientCert.trim(),
+          caCert: caCert.trim()
+        }
+      });
+      
+    } catch (sshError) {
+      connection.end();
+      throw new Error(`SSH Command execution failed: ${sshError.message}`);
+    }
     
     // Handle connection cleanup when needed
     connection.on('end', () => {
