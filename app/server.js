@@ -129,18 +129,38 @@ app.post('/connect', async (req, res) => {
       // Create a function to execute commands and handle their output
       const execCommand = (cmd) => {
         return new Promise((resolve, reject) => {
+          let timeoutId;
+          const TIMEOUT_MS = 10000; // 10 seconds
+          
           connection.exec(cmd, (err, stream) => {
             if (err) reject(err);
             
             let output = '';
+            
+            // Set timeout
+            timeoutId = setTimeout(() => {
+              stream.end();
+              reject(new Error(`Command timed out after ${TIMEOUT_MS/1000} seconds: ${cmd}\nPartial output: ${output}`));
+            }, TIMEOUT_MS);
+            
             stream.on('data', (data) => {
               output += data;
             });
+            
             stream.stderr.on('data', (data) => {
               output += data;
             });
+            
             stream.on('close', () => {
+              clearTimeout(timeoutId);
               resolve(output);
+            });
+            
+            stream.on('exit', (code, signal) => {
+              if (code !== 0) {
+                clearTimeout(timeoutId);
+                reject(new Error(`Command failed with code ${code}: ${cmd}\nOutput: ${output}`));
+              }
             });
           });
         });
