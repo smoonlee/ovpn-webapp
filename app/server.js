@@ -12,7 +12,7 @@ function cidrToNetworkAndMask(cidr) {
   const [ip, bits] = cidr.split('/');
   const numBits = parseInt(bits, 10);
   const maskParts = [];
-  
+
   for (let i = 0; i < 4; i++) {
     if (i * 8 < numBits) {
       if ((i + 1) * 8 <= numBits) {
@@ -73,7 +73,7 @@ async function getSSHKey(keyName) {
 async function connectSSH(serverIP, privateKey) {
   return new Promise((resolve, reject) => {
     const conn = new Client();
-    
+
     conn.on('ready', () => {
       console.log('SSH Connection established');
       resolve(conn);
@@ -102,7 +102,7 @@ async function connectSSH(serverIP, privateKey) {
 app.post('/connect', async (req, res) => {
   const { server } = req.body;
   const keyName = process.env.SSH_SECRET_NAME;
-  
+
   if (!server || !keyName) {
     return res.status(400).json({ error: 'Server name and SSH_SECRET_NAME environment variable are required' });
   }
@@ -115,10 +115,10 @@ app.post('/connect', async (req, res) => {
   try {
     // Retrieve SSH key from Key Vault
     const sshKey = await getSSHKey(keyName);
-    
+
     // Establish SSH connection
     const connection = await connectSSH(serverIP, sshKey);
-    
+
     // Execute commands to create certificates and CCD profile
     try {
       const { customerName, customerNetwork, azureSubnet } = req.body;
@@ -126,58 +126,48 @@ app.post('/connect', async (req, res) => {
         throw new Error('Customer name, customer network, and Azure subnet are required');
       }
 
-      // Create logging directory if it doesn't exist
-      await execCommand('mkdir -p /var/log/ovpnsetup');
-
-      // Function to write to log file
-      const writeToLog = async (message) => {
-        const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] ${message}\n`;
-        await execCommand(`echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`);
-      };
-
       // Create a function to execute commands and handle their output
       const execCommand = (cmd) => {
         return new Promise((resolve, reject) => {
           let timeoutId;
           const TIMEOUT_MS = 30000; // 30 seconds
-          
+
           connection.exec(cmd, async (err, stream) => {
             if (err) {
-              await writeToLog(`Error executing command: ${cmd}\nError: ${err.message}`);
+              console.error(`Error executing command: ${cmd}\nError: ${err.message}`);
               reject(err);
               return;
             }
-            
+
             let output = '';
-            
+
             // Set timeout
-            timeoutId = setTimeout(async () => {
+            timeoutId = setTimeout(() => {
               stream.end();
               const timeoutError = `Command timed out after ${TIMEOUT_MS/1000} seconds: ${cmd}\nPartial output: ${output}`;
-              await writeToLog(timeoutError);
+              console.error(timeoutError);
               reject(new Error(timeoutError));
             }, TIMEOUT_MS);
-            
+
             stream.on('data', (data) => {
               output += data;
             });
-            
+
             stream.stderr.on('data', (data) => {
               output += data;
             });
-            
-            stream.on('close', async () => {
+
+            stream.on('close', () => {
               clearTimeout(timeoutId);
-              await writeToLog(`Command completed: ${cmd}\nOutput: ${output}`);
+              console.log(`Command completed: ${cmd}`);
               resolve(output);
             });
-            
-            stream.on('exit', async (code, signal) => {
+
+            stream.on('exit', (code, signal) => {
               if (code !== 0) {
                 clearTimeout(timeoutId);
                 const errorMsg = `Command failed with code ${code}: ${cmd}\nOutput: ${output}`;
-                await writeToLog(errorMsg);
+                console.error(errorMsg);
                 reject(new Error(errorMsg));
               }
             });
@@ -185,62 +175,72 @@ app.post('/connect', async (req, res) => {
         });
       };
 
+      // Create logging directory first
+      await execCommand('mkdir -p /var/log/ovpnsetup');
+
+      // Then create the logging function
+      const writeToLog = async (message) => {
+        const timestamp = new Date().toISOString();
+        const logEntry = `[${timestamp}] ${message}\n`;
+        await execCommand(`echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`);
+      };
+
       // Get CA password from Key Vault
       const caPassword = await getSSHKey('ovpn-ca');
-      
+
       // Cleanup existing certificates and routes if they exist
       console.log(`Cleaning up existing certificates for customer: ${customerName}`);
       await writeToLog(`Starting cleanup process for customer: ${customerName}`);
-      
+
       try {
         // Remove existing route if it exists
         await execCommand(`ip route del ${customerNetwork} dev tun0 2>/dev/null || true`);
-        
+
         // Remove existing certificates
         await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/private/${customerName}.key 2>/dev/null || true`);
         await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/reqs/${customerName}.req 2>/dev/null || true`);
         await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt 2>/dev/null || true`);
-        
+
         // Remove CCD file
         await execCommand(`rm -f /etc/openvpn/ccd/${customerName} 2>/dev/null || true`);
-        
+
         // Clean up index.txt entries (if they exist)
         await execCommand(`cd /etc/openvpn/easy-rsa && sed -i "/${customerName}/d" pki/index.txt 2>/dev/null || true`);
-        
+
         await writeToLog('Cleanup completed successfully');
       } catch (cleanupError) {
         await writeToLog(`Cleanup warning (non-fatal): ${cleanupError.message}`);
       }
-      
+
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
       await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
-      
+
       // Create CCD profile
       const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
       const azureSubnetInfo = cidrToNetworkAndMask(azureSubnet);
-      
+
       const ccdContent = [
         `ifconfig-push ${customerNetworkInfo.network} ${customerNetworkInfo.mask}`,
         `push "route ${azureSubnetInfo.network} ${azureSubnetInfo.mask}"`
       ].join('\n');
-      
+
       await execCommand(`echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`);
-      
+
       // Add IP route for client network via tun0
       await writeToLog(`Adding IP route for client network: ${customerNetworkInfo.network}/${customerNetwork.split('/')[1]}`);
       await execCommand(`ip route add ${customerNetworkInfo.network}/${customerNetwork.split('/')[1]} dev tun0`);
-      
+
       // Read generated certificates
       const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
       const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
       const caCert = await execCommand('cat /etc/openvpn/easy-rsa/pki/ca.crt');
-      
+
       // Close the connection
       connection.end();
-      
+
       res.json({
         message: 'Successfully created certificates and CCD profile',
         server: serverIP,
@@ -250,17 +250,17 @@ app.post('/connect', async (req, res) => {
           caCert: caCert.trim()
         }
       });
-      
+
     } catch (sshError) {
       connection.end();
       throw new Error(`SSH Command execution failed: ${sshError.message}`);
     }
-    
+
     // Handle connection cleanup when needed
     connection.on('end', () => {
       console.log('SSH Connection ended');
     });
-    
+
   } catch (error) {
     console.error('Connection error:', error);
     res.status(500).json({ error: 'Failed to establish connection', details: error.message });
