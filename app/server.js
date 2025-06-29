@@ -171,8 +171,8 @@ app.post('/connect', async (req, res) => {
       
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
-      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa gen-req ${customerName} nopass`);
-      await execCommand(`cd /etc/openvpn/easy-rsa && echo "${caPassword}" | ./easyrsa sign-req client ${customerName} yes`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
       
       // Create CCD profile
       const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
