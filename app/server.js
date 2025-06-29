@@ -76,7 +76,7 @@ app.post("/connect", async (req, res) => {
 
     // Start SSH connection (server-side)
     const serverIP = getServerIP(server);
-    const sshCommand = `ssh -i ${tempKeyPath} -o appsvc_ovpn@${serverIP}`;
+    const sshCommand = `ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no appsvc_ovpn@${serverIP} "echo 'hello_dev' > ~/hello_dev"`;
 
     console.log(`Starting SSH session to ${server} at ${serverIP}...`);
 
