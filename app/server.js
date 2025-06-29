@@ -225,6 +225,25 @@ app.post("/connect", async (req, res) => {
       console.log("[Debug] Creating initial logging directory");
       await execCommand("mkdir -p /var/log/ovpnsetup");
 
+      // Cleanup existing certificates and configuration if they exist
+      console.log("[Debug] Cleaning up any existing certificates and configuration");
+      await writeToLog(`Cleaning up existing configuration for customer: ${customerName}`);
+      
+      // Remove existing CCD file
+      await execCommand(`rm -f /etc/openvpn/ccd/${customerName}`);
+      
+      // Remove existing certificates and key
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke ${customerName} || true`);
+      await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
+      await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
+      await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/reqs/${customerName}.req`);
+      
+      // Remove existing routes (ignoring errors if route doesn't exist)
+      const existingRoute = await execCommand(`ip route show | grep "^${customerNetworkInfo.network}/${customerNetwork.split("/")[1]} dev tun0" || true`);
+      if (existingRoute.trim()) {
+        await execCommand(`sudo ip route del ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]} dev tun0 || true`);
+      }
+
       // Execute certificate creation commands
       console.log("[Debug] Starting certificate creation process");
       await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
@@ -259,8 +278,8 @@ app.post("/connect", async (req, res) => {
       const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key | awk '/BEGIN PRIVATE KEY/,/END PRIVATE KEY/'`);
       
       console.log("[Debug] Reading client certificate");
-      // Using awk to extract just the certificate portion with BEGIN/END markers
-      const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/'`);
+      // Using grep -A and sed to get just the certificate content
+      const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt | grep -A 1000 "BEGIN CERTIFICATE" | grep -B 1000 "END CERTIFICATE" | grep -v "Signature Algorithm" | grep -v "Data:" | grep -v "Serial Number:" | grep -v "Version:" | grep -v "Issuer:" | grep -v "Validity" | grep -v "Subject:" | grep -v "Not " | grep -v "Public Key" | grep -v "Modulus:" | grep -v "Subject Public" | grep -v "Exponent:" | grep -v "X509v3" | grep -v "keyid:" | grep -v "DirName:" | grep -v "serial:" | grep -v "Digital" | grep -v "CA:" | grep -v "Signature Value:" | sed '/^[[:space:]]*$/d'`);
       
       console.log("[Debug] Reading CA certificate");
       const caCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/ca.crt | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/'`);
