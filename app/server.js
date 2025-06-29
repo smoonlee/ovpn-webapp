@@ -1,8 +1,8 @@
 const express = require("express");
-const fs = require("fs");
+const fs = require("fs").promises;
 const path = require("path");
 const os = require("os");
-
+const { exec } = require("child_process");
 const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 
@@ -14,17 +14,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static("public"));
 
-// Helper: map server name to IP
+// Server IP mapping
+const serverIPs = {
+  app1: "20.4.208.94",
+  app2: "2.3.4.5",
+  app3: "3.4.5.6",
+};
+
 function getServerIP(name) {
-  const serverIPs = {
-    app1: "1.2.3.4",
-    app2: "2.3.4.5",
-    app3: "3.4.5.6",
-  };
   return serverIPs[name] || "0.0.0.0";
 }
 
-// Azure Key Vault helper to get SSH private key
+// Fetch SSH private key from Azure Key Vault
 async function getSSHKeyFromVault(vaultName, secretName) {
   const credential = new DefaultAzureCredential();
   const vaultUrl = `https://${vaultName}.vault.azure.net`;
@@ -33,12 +34,7 @@ async function getSSHKeyFromVault(vaultName, secretName) {
   return secret.value;
 }
 
-// Route to serve the form (optional if you have index.html in /public)
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
-
-// POST /connect - generate OpenVPN config and include SSH info
+// POST /connect - start SSH session and respond with a message
 app.post("/connect", async (req, res) => {
   const { server, customerName, azureSubnet, customerNetwork } = req.body;
 
@@ -54,72 +50,53 @@ app.post("/connect", async (req, res) => {
   }
 
   try {
-    // Fetch SSH private key from Key Vault
+    // Fetch SSH private key
     const sshPrivateKey = await getSSHKeyFromVault(vaultName, secretName);
-    console.log(
-      `SSH private key fetched (first 30 chars): ${sshPrivateKey.substring(
-        0,
-        30
-      )}...`
+
+    // Write private key to a temp file with proper permissions
+    const tempKeyPath = path.join(
+      os.tmpdir(),
+      `${customerName.replace(/\s+/g, "_")}_id_rsa`
     );
+    await fs.writeFile(tempKeyPath, sshPrivateKey, { mode: 0o600 });
 
-    // Build SSH config comments
-    const serverIPs = {
-      app1: "1.2.3.4",
-      app2: "2.3.4.5",
-      app3: "3.4.5.6",
-    };
+    // Start SSH connection (server-side)
+    const serverIP = getServerIP(server);
+    const sshCommand = `ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no appsvc_ovpn@${serverIP}`;
 
-    let sshConfigSection = "# SSH Configurations:\n";
-    for (const [name, ip] of Object.entries(serverIPs)) {
-      sshConfigSection += `# ${name} - ssh -i /path/to/private_key appsvc_ovpn@${ip}\n`;
-    }
+    console.log(`Starting SSH session to ${server} at ${serverIP}...`);
 
-    // Build the OpenVPN config text
-    const vpnConfig = `
-client
-dev tun
-proto udp
-remote ${getServerIP(server)} 1194
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-CBC
-verb 4
-
-# Custom Metadata
-# Customer Name: ${customerName}
-# Azure Subnet: ${azureSubnet}
-# Customer Network: ${customerNetwork}
-
-${sshConfigSection}
-`;
-
-    // Create a temporary file
-    const fileName = `${customerName.replace(/\s+/g, "_")}_openvpn.ovpn`;
-    const tempPath = path.join(os.tmpdir(), fileName);
-
-    // Write the file and send for download
-    fs.writeFile(tempPath, vpnConfig, (err) => {
-      if (err) {
-        console.error("Error writing file:", err);
-        return res.status(500).send("Failed to generate config.");
+    const sshProcess = exec(sshCommand, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`SSH error: ${error.message}`);
+        return;
       }
-
-      res.download(tempPath, fileName, (err) => {
-        if (err) {
-          console.error("Download error:", err);
-        }
-        // Clean up temp file after download
-        fs.unlink(tempPath, () => {});
-      });
+      if (stderr) {
+        console.error(`SSH stderr: ${stderr}`);
+      }
+      console.log(`SSH stdout: ${stdout}`);
     });
+
+    sshProcess.stdout.pipe(process.stdout);
+    sshProcess.stderr.pipe(process.stderr);
+    sshProcess.stdin.pipe(process.stdin);
+
+    sshProcess.on("exit", async () => {
+      await fs.unlink(tempKeyPath).catch(() => {});
+      console.log("SSH session ended and private key cleaned up.");
+    });
+
+    // Respond immediately to the client
+    res.json({ message: "ssh_auth completed" });
   } catch (error) {
     console.error("Error in /connect:", error);
-    res.status(500).send("Failed to retrieve SSH key or generate config.");
+    res.status(500).send("Failed to retrieve SSH key or start SSH session.");
   }
+});
+
+// Optional: Serve your index.html at root (if you have one)
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.listen(PORT, () => {
