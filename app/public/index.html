@@ -1,12 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Node.js Web App</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenVPN Connection</title>
+  <style>
+    /* Ensure consistent box-sizing across all elements */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #e3f2fd, #f4f4f4);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .form-container {
+      background-color: #ffffff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 400px;
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+      transition: all 0.3s ease;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: #007BFF;
+      box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    @media (max-width: 480px) {
+      .form-container {
+        padding: 20px;
+      }
+
+      h2 {
+        font-size: 20px;
+      }
+    }
+  </style>
 </head>
 <body>
-    <h1>Welcome to the Node.js Web App!</h1>
-    <p>This is a basic HTML frontend served by Node.js.</p>
+  <form action="/connect" method="POST" class="form-container">
+    <h2>OpenVPN Connection</h2>
+
+    <label for="server">Select Server:</label>
+    <select id="server" name="server" required>
+      <option value="">-- Choose a server --</option>
+      <option value="app1">App1 (1.2.3.4)</option>
+      <option value="app2">App2 (2.3.4.5)</option>
+      <option value="app3">App3 (3.4.5.6)</option>
+    </select>
+
+    <label for="customerName">Customer Name:</label>
+    <input type="text" id="customerName" name="customerName" placeholder="e.g. Acme Corp" required>
+
+    <label for="azureSubnet">Azure Subnet:</label>
+    <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required>
+
+    <label for="customerNetwork">Customer Network:</label>
+    <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required>
+
+    <button type="submit">Generate</button>
+  </form>
 </body>
 </html>
