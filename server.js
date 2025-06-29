@@ -1,5 +1,5 @@
 const express = require('express');
-const { ManagedIdentityCredential } = require('@azure/identity');
+const { DefaultAzureCredential } = require('@azure/identity');
 const { SecretClient } = require('@azure/keyvault-secrets');
 
 // Express app setup
@@ -9,19 +9,21 @@ app.use(express.static('public'));
 
 // Azure Key Vault configuration
 const KEY_VAULT_NAME = process.env.KEY_VAULT_NAME;
-const MANAGED_IDENTITY_CLIENT_ID = process.env.MANAGED_IDENTITY_CLIENT_ID;
 const SSH_KEY_SECRET_NAME = process.env.SSH_KEY_SECRET_NAME || 'ssh-key-secret';
 
+// Environment configuration
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// Validation
 if (!KEY_VAULT_NAME) {
     throw new Error('KEY_VAULT_NAME environment variable is required');
 }
 
-if (!MANAGED_IDENTITY_CLIENT_ID) {
-    throw new Error('MANAGED_IDENTITY_CLIENT_ID environment variable is required');
-}
+// Initialize Key Vault client with system-assigned managed identity
+const credential = new DefaultAzureCredential({
+    managedIdentityClientId: undefined // Use system-assigned managed identity
+});
 
-// Initialize Key Vault client with User Managed Identity
-const credential = new ManagedIdentityCredential(MANAGED_IDENTITY_CLIENT_ID);
 const keyVaultUrl = `https://${KEY_VAULT_NAME}.vault.azure.net`;
 const secretClient = new SecretClient(keyVaultUrl, credential);
 
@@ -60,22 +62,33 @@ app.get('/api/ssh-key', async (req, res) => {
         }
         throw lastError;
     } catch (error) {
-        console.error('Failed to fetch SSH key:', error.message);
+        console.error('Failed to fetch SSH key:', error);
         
         // Send appropriate error response based on the error type
         if (error.code === 'SecretNotFound') {
             res.status(404).json({ error: 'SSH key secret not found in Key Vault' });
         } else if (error.code === 'Unauthorized') {
-            res.status(401).json({ error: 'Not authorized to access Key Vault' });
+            res.status(401).json({ 
+                error: 'Not authorized to access Key Vault',
+                details: IS_PRODUCTION 
+                    ? 'Managed Identity authentication failed' 
+                    : 'Make sure you are logged in using az login or set up appropriate credentials'
+            });
         } else {
-            res.status(500).json({ error: 'Failed to fetch SSH key' });
+            res.status(500).json({ 
+                error: 'Failed to fetch SSH key',
+                details: error.message
+            });
         }
     }
 });
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy' });
+    res.json({ 
+        status: 'healthy',
+        auth_type: IS_PRODUCTION ? 'ManagedIdentity' : 'DefaultAzureCredential'
+    });
 });
 
 // Start server
@@ -83,4 +96,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Using Key Vault: ${keyVaultUrl}`);
+    console.log(`Authentication type: ${IS_PRODUCTION ? 'ManagedIdentity' : 'DefaultAzureCredential'}`);
 });
