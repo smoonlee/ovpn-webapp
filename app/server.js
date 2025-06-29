@@ -43,7 +43,7 @@ async function getSSHKeyFromVault(vaultName, secretName) {
 app.post("/connect", async (req, res) => {
   console.log('Received POST request to /connect');
   console.log('Request body:', req.body);
-  
+
   const { server, customerName, azureSubnet, customerNetwork } = req.body;
 
   if (!server || !customerName || !azureSubnet || !customerNetwork) {
@@ -53,7 +53,7 @@ app.post("/connect", async (req, res) => {
 
   const vaultName = process.env.KEYVAULT_NAME;
   const secretName = process.env.SSH_SECRET_NAME;
-  
+
   console.log('Environment Variables Check:');
   console.log('KEYVAULT_NAME:', vaultName || 'not set');
   console.log('SSH_SECRET_NAME:', secretName || 'not set');
@@ -66,6 +66,9 @@ app.post("/connect", async (req, res) => {
   try {
     // Fetch SSH private key
     const sshPrivateKey = await getSSHKeyFromVault(vaultName, secretName);
+    
+    // Send response confirming SSH key retrieval
+    res.json({ message: "ssh_key_retrieved", status: "success" });
 
     // Write private key to a temp file with proper permissions
     const tempKeyPath = path.join(
@@ -76,7 +79,7 @@ app.post("/connect", async (req, res) => {
 
     // Start SSH connection (server-side)
     const serverIP = getServerIP(server);
-    const sshCommand = `ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no appsvc_ovpn@${serverIP} "echo 'hello_dev' > ~/hello_dev"`;
+        const sshCommand = `ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no appsvc_ovpn@${serverIP} "echo 'hello_dev' > ~/hello_dev"`;
 
     console.log(`Starting SSH session to ${server} at ${serverIP}...`);
 
@@ -99,9 +102,6 @@ app.post("/connect", async (req, res) => {
       await fs.unlink(tempKeyPath).catch(() => {});
       console.log("SSH session ended and private key cleaned up.");
     });
-
-    // Respond immediately to the client
-    res.json({ message: "ssh_auth completed" });
   } catch (error) {
     console.error("Error in /connect:", error);
     res.status(500).send("Failed to retrieve SSH key or start SSH session.");
