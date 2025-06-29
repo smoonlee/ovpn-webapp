@@ -154,18 +154,22 @@ app.post("/connect", async (req, res) => {
 
     // Execute commands to create certificates and CCD profile
     try {
+      // Simple logging function that doesn't use SSH commands
+      const logToConsole = (message) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] ${message}`);
+      };
+
       // Function to execute SSH commands with proper error handling
       const execCommand = (cmd) => {
-        console.log("[Debug] Executing command:", cmd);
+        logToConsole(`Executing command: ${cmd}`);
         return new Promise((resolve, reject) => {
           let timeoutId;
           const TIMEOUT_MS = 30000; // 30 seconds
 
           connection.exec(cmd, async (err, stream) => {
             if (err) {
-              await writeToLog(
-                `Error executing command: ${cmd}\nError: ${err.message}`
-              );
+              logToConsole(`Error executing command: ${cmd}\nError: ${err.message}`);
               reject(err);
               return;
             }
@@ -173,12 +177,12 @@ app.post("/connect", async (req, res) => {
             let output = "";
 
             // Set timeout
-            timeoutId = setTimeout(async () => {
+            timeoutId = setTimeout(() => {
               stream.end();
               const timeoutError = `Command timed out after ${
                 TIMEOUT_MS / 1000
               } seconds: ${cmd}\nPartial output: ${output}`;
-              await writeToLog(timeoutError);
+              logToConsole(timeoutError);
               reject(new Error(timeoutError));
             }, TIMEOUT_MS);
 
@@ -190,17 +194,17 @@ app.post("/connect", async (req, res) => {
               output += data;
             });
 
-            stream.on("close", async () => {
+            stream.on("close", () => {
               clearTimeout(timeoutId);
-              await writeToLog(`Command completed: ${cmd}\nOutput: ${output}`);
+              logToConsole(`Command completed: ${cmd}\nOutput: ${output}`);
               resolve(output);
             });
 
-            stream.on("exit", async (code, signal) => {
+            stream.on("exit", (code, signal) => {
               if (code !== 0) {
                 clearTimeout(timeoutId);
                 const errorMsg = `Command failed with code ${code}: ${cmd}\nOutput: ${output}`;
-                await writeToLog(errorMsg);
+                logToConsole(errorMsg);
                 reject(new Error(errorMsg));
               }
             });
@@ -210,16 +214,19 @@ app.post("/connect", async (req, res) => {
 
       // Function to write to log file
       const writeToLog = async (message) => {
-        console.log("[Debug] Attempting to write to log:", message);
         const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] ${message}\n`;
-        await execCommand(
+        const logEntry = `[${timestamp}] ${message}`;
+        logToConsole(logEntry);
+        // First ensure the directory exists
+        await execCommand("mkdir -p /var/log/ovpnsetup");
+        // Then write the log
+        return execCommand(
           `echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`
         );
       };
 
       // Create logging directory if it doesn't exist
-      console.log("[Debug] Attempting to create logging directory");
+      console.log("[Debug] Creating initial logging directory");
       await execCommand("mkdir -p /var/log/ovpnsetup");
 
       // Execute certificate creation commands
