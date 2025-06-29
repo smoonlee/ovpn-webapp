@@ -53,6 +53,11 @@ app.post("/connect", async (req, res) => {
 
   const vaultName = process.env.KEYVAULT_NAME;
   const secretName = process.env.SSH_SECRET_NAME;
+  
+  console.log('Environment Variables Check:');
+  console.log('KEYVAULT_NAME:', vaultName || 'not set');
+  console.log('SSH_SECRET_NAME:', secretName || 'not set');
+  console.log('All environment variables:', process.env);
 
   if (!vaultName || !secretName) {
     return res.status(500).send("Key Vault environment variables not set.");
@@ -71,7 +76,7 @@ app.post("/connect", async (req, res) => {
 
     // Start SSH connection (server-side)
     const serverIP = getServerIP(server);
-    const sshCommand = `ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no appsvc_ovpn@${serverIP}`;
+    const sshCommand = `ssh -i ${tempKeyPath} -o appsvc_ovpn@${serverIP}`;
 
     console.log(`Starting SSH session to ${server} at ${serverIP}...`);
 
