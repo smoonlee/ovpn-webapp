@@ -1,17 +1,19 @@
 const express = require("express");
-const app = express();
 const path = require("path");
-const configRouter = require("./app/routes/config");
+const bodyParser = require("body-parser");
 
-app.use(express.json());
+const app = express();
+const PORT = 3000;
 
-// Serve static files from the 'public' directory
+// Middleware
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Mount the config router on /config
-app.use("/config", configRouter);
+// Routes
+const configRoute = require("./routes/config");
+app.use("/config", configRoute);
 
-const PORT = process.env.PORT || 3000;
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });
