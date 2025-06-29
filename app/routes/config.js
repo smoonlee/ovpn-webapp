@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const app = express();
 
 // Map server names to their public IPs
 const serverIPs = {
@@ -9,6 +10,9 @@ const serverIPs = {
     app2: '2.3.4.5',
     app3: '3.4.5.6'
 };
+
+// Serve static files from the 'public' directory at the root URL
+app.use(express.static(path.join(__dirname, 'public')));
 
 router.post('/', (req, res) => {
     const { server, customerName, azureSubnet, customerNetwork } = req.body;
