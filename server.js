@@ -20,22 +20,38 @@ const vpnHosts = {
   atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
 };
 
-// Managed Identity Client ID (for User-Assigned Managed Identity)
-const managedIdentityClientId = process.env.MANAGED_IDENTITY_CLIENT_ID;
-
 // Azure Key Vault info
 const keyVaultName = process.env.KEYVAULT_NAME;
 const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
 
-// Create credential once
+// Create credential with explicit User-Assigned Managed Identity configuration
 const credential = new DefaultAzureCredential({
-  managedIdentityClientId: managedIdentityClientId,
+  managedIdentityClientId: process.env.MANAGED_IDENTITY_CLIENT_ID,
+  excludeEnvironmentCredential: true,  // Skip environment credential
+  excludeAzureCliCredential: true,     // Skip Azure CLI credential
+  excludeVisualStudioCodeCredential: true,  // Skip VS Code credential
+  excludeAzureDeveloperCliCredential: true, // Skip Azure Developer CLI credential
+  excludeWorkloadIdentityCredential: true    // Skip workload identity
 });
 
 const secretClient = new SecretClient(vaultUrl, credential);
 
 async function getSshPrivateKey() {
   try {
+    logToFile(`🔐 Attempting to get SSH key from Key Vault using Managed Identity ${process.env.MANAGED_IDENTITY_CLIENT_ID}`);
+    
+    // Test the credential first
+    try {
+      const credentialResult = await credential.getToken("https://vault.azure.net/.default");
+      logToFile("✅ Successfully obtained Azure AD token for Key Vault");
+    } catch (credError) {
+      logToFile(`❌ Failed to get Azure AD token: ${credError.message}`);
+      if (credError.errorResponse) {
+        logToFile(`Error details: ${JSON.stringify(credError.errorResponse)}`);
+      }
+      throw credError;
+    }
+
     const secret = await secretClient.getSecret("ssh-private-key");
     logToFile("✅ Successfully retrieved SSH key from Key Vault");
     if (!secret.value || secret.value.trim() === '') {
