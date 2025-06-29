@@ -1,31 +1,24 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
-const app = express();
+const fs = require("fs");
+const path = require("path");
 
 // Map server names to their public IPs
 const serverIPs = {
-    app1: '1.2.3.4',
-    app2: '2.3.4.5',
-    app3: '3.4.5.6'
+  app1: "1.2.3.4",
+  app2: "2.3.4.5",
+  app3: "3.4.5.6",
 };
 
-// Serve static files from the 'public' directory at the root URL
-app.use(express.static(path.join(__dirname, 'public')));
+router.post("/", (req, res) => {
+  const { server, customerName, azureSubnet, customerNetwork } = req.body;
 
-router.post('/', (req, res) => {
-    const { server, customerName, azureSubnet, customerNetwork } = req.body;
+  const serverIP = serverIPs[server];
+  if (!serverIP) {
+    return res.status(400).send("Invalid server selected.");
+  }
 
-    // Get the public IP for the selected server
-    const serverIP = serverIPs[server];
-
-    if (!serverIP) {
-        return res.status(400).send('Invalid server selected.');
-    }
-
-    // Generate OpenVPN config file content
-    const configFileContent = `
+  const configFileContent = `
 client
 dev tun
 proto udp
@@ -47,26 +40,26 @@ auth-user-pass
 </key>
 `;
 
-    // Ensure the temp folder exists
-    const tempDir = path.join(__dirname, '..', 'temp');
-    if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir);
+  const tempDir = path.join(__dirname, "..", "..", "temp");
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  const filePath = path.join(tempDir, `${customerName}-config.ovpn`);
+  fs.writeFileSync(filePath, configFileContent);
+
+  res.download(filePath, `${customerName}-config.ovpn`, (err) => {
+    if (err) {
+      console.error("Error sending file:", err);
+      res.status(500).send("Error generating config file.");
     }
 
-    // Create a temporary file for the config
-    const filePath = path.join(tempDir, `${customerName}-config.ovpn`);
-    fs.writeFileSync(filePath, configFileContent);
-
-    // Send the file as a download
-    res.download(filePath, `${customerName}-config.ovpn`, (err) => {
-        if (err) {
-            console.error('Error sending file:', err);
-            res.status(500).send('Error generating config file.');
-        }
-
-        // Clean up the temporary file
-        fs.unlinkSync(filePath);
+    fs.unlink(filePath, (unlinkErr) => {
+      if (unlinkErr) {
+        console.error("Error deleting temp file:", unlinkErr);
+      }
     });
+  });
 });
 
 module.exports = router;
