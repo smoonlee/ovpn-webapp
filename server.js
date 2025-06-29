@@ -1,100 +1,137 @@
-const express = require('express');
-const { DefaultAzureCredential } = require('@azure/identity');
-const { SecretClient } = require('@azure/keyvault-secrets');
+const express = require("express");
+const bodyParser = require("body-parser");
+const fs = require("fs");
+const path = require("path");
+const { NodeSSH } = require("node-ssh");
+const { DefaultAzureCredential } = require("@azure/identity");
+const { SecretClient } = require("@azure/keyvault-secrets");
 
-// Express app setup
 const app = express();
-app.use(express.json());
-app.use(express.static('public'));
+const PORT = process.env.PORT || 3000;
 
-// Azure Key Vault configuration
-const KEY_VAULT_NAME = process.env.KEY_VAULT_NAME;
-const SSH_KEY_SECRET_NAME = process.env.SSH_KEY_SECRET_NAME || 'ssh-key-secret';
+app.use(express.static("public"));
+app.use(bodyParser.json({ limit: "1mb" }));
 
-// Environment configuration
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const vpnHosts = {
+  exos: { host: "20.4.208.94", username: "appsvc_ovpn" },
+  matrix: { host: "132.220.32.199", username: "appsvc_ovpn" },
+  atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
+};
 
-// Validation
-if (!KEY_VAULT_NAME) {
-    throw new Error('KEY_VAULT_NAME environment variable is required');
+const keyVaultName = process.env.KEYVAULT_NAME || "kv-ovpn-webapp-dev";
+const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
+
+const credential = new DefaultAzureCredential();
+const secretClient = new SecretClient(vaultUrl, credential);
+
+// Implement retry logic for Key Vault operations
+async function getSshPrivateKey(retryCount = 3) {
+  let lastError;
+  for (let i = 0; i < retryCount; i++) {
+    try {
+      const secret = await secretClient.getSecret("ssh-private-key");
+      return secret.value;
+    } catch (err) {
+      lastError = err;
+      if (i < retryCount - 1) {
+        // Exponential backoff: wait 1s, 2s, 4s between retries
+        await new Promise(
+          (resolve) => setTimeout(resolve, Math.pow(2, i) * 1000)
+        );
+      }
+    }
+  }
+  throw new Error(
+    `Failed to retrieve SSH key after ${retryCount} attempts: ${lastError.message}`
+  );
 }
 
-// Initialize Key Vault client with system-assigned managed identity
-const credential = new DefaultAzureCredential({
-    managedIdentityClientId: undefined // Use system-assigned managed identity
-});
+const logDir = "/var/log/ovpn-web";
+const logFile = path.join(logDir, "generate.log");
 
-const keyVaultUrl = `https://${KEY_VAULT_NAME}.vault.azure.net`;
-const secretClient = new SecretClient(keyVaultUrl, credential);
+function logToFile(message) {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] ${message}\n`;
+  try {
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(logFile, line);
+  } catch (err) {
+    console.error("⚠️ Failed to write log:", err.message);
+  }
+}
 
-// Middleware for error handling
-app.use((err, req, res, next) => {
-    console.error('Error:', err.message);
-    res.status(500).json({ error: 'Internal Server Error' });
-});
+app.post("/api/generate", async (req, res) => {
+  const { clientName, serverName, customerNetwork, azureSubnet } = req.body;
+  const logs = [];
 
-// Route to get SSH key from Key Vault
-app.get('/api/ssh-key', async (req, res) => {
-    try {
-        // Implement retry logic with exponential backoff
-        const maxRetries = 3;
-        let currentTry = 0;
-        let lastError = null;
+  function log(message) {
+    logs.push(message);
+    logToFile(message);
+  }
 
-        while (currentTry < maxRetries) {
-            try {
-                console.log(`Attempting to fetch SSH key secret (attempt ${currentTry + 1}/${maxRetries})`);
-                const secret = await secretClient.getSecret(SSH_KEY_SECRET_NAME);
-                return res.json({ success: true, key: secret.value });
-            } catch (error) {
-                lastError = error;
-                if (error.code === 'REQUEST_SEND_ERROR') {
-                    // Exponential backoff
-                    const waitTime = Math.pow(2, currentTry) * 1000;
-                    console.log(`Retrying after ${waitTime}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    currentTry++;
-                } else {
-                    // Non-retriable error
-                    throw error;
-                }
-            }
-        }
-        throw lastError;
-    } catch (error) {
-        console.error('Failed to fetch SSH key:', error);
-        
-        // Send appropriate error response based on the error type
-        if (error.code === 'SecretNotFound') {
-            res.status(404).json({ error: 'SSH key secret not found in Key Vault' });
-        } else if (error.code === 'Unauthorized') {
-            res.status(401).json({ 
-                error: 'Not authorized to access Key Vault',
-                details: IS_PRODUCTION 
-                    ? 'Managed Identity authentication failed' 
-                    : 'Make sure you are logged in using az login or set up appropriate credentials'
-            });
-        } else {
-            res.status(500).json({ 
-                error: 'Failed to fetch SSH key',
-                details: error.message
-            });
-        }
-    }
-});
+  log(
+    `📥 Request: clientName=${clientName}, serverName=${serverName}, customerNetwork=${customerNetwork}, azureSubnet=${azureSubnet}`
+  );
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'healthy',
-        auth_type: IS_PRODUCTION ? 'ManagedIdentity' : 'DefaultAzureCredential'
+  if (!clientName || !serverName || !vpnHosts[serverName]) {
+    log("❌ Invalid request parameters");
+    return res.status(400).json({
+      error: "Missing or invalid clientName/serverName",
+      logs,
     });
+  }
+
+  const { host, username } = vpnHosts[serverName];
+  const ssh = new NodeSSH();
+
+  try {
+    log("🔐 Retrieving SSH private key from Key Vault...");
+    const sshPrivateKey = await getSshPrivateKey();
+    log("🔐 SSH private key retrieved from Key Vault");
+
+    log(`🔌 Connecting to SSH host ${host} as user ${username}...`);
+    await ssh.connect({ host, username, privateKey: sshPrivateKey });
+    log(`✅ SSH connected to ${host} as ${username}`);
+
+    const scriptPath = "/etc/openvpn/generate-client.sh";
+    const certPath = `/etc/openvpn/client-certs/${clientName}`;
+
+    const command = `bash ${scriptPath} ${clientName} "${
+      customerNetwork || ""
+    }" "${azureSubnet || ""}"`.trim();
+    log(`▶️ Executing: ${command}`);
+
+    const { stdout, stderr } = await ssh.execCommand(command);
+    if (stdout) log(`ℹ️ stdout: ${stdout}`);
+    if (stderr) log(`⚠️ stderr: ${stderr}`);
+
+    const ca = (await ssh.execCommand(`cat ${certPath}/ca.crt`)).stdout.trim();
+    const cert = (
+      await ssh.execCommand(`cat ${certPath}/${clientName}.crt`)
+    ).stdout.trim();
+    const key = (
+      await ssh.execCommand(`cat ${certPath}/${clientName}.key`)
+    ).stdout.trim();
+
+    if (!ca || !cert || !key)
+      throw new Error("Cert contents are empty or missing");
+
+    log(`✅ Certs fetched successfully for ${clientName}`);
+
+    res.json({ ca, cert, key, logs });
+  } catch (err) {
+    console.error("❌ Error during generation:", err);
+    log(`❌ Exception: ${err.message}`);
+    res
+      .status(500)
+      .json({ error: "Internal error while generating certificates.", logs });
+  } finally {
+    ssh.dispose();
+    log("🔌 SSH connection closed\n");
+  }
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Using Key Vault: ${keyVaultUrl}`);
-    console.log(`Authentication type: ${IS_PRODUCTION ? 'ManagedIdentity' : 'DefaultAzureCredential'}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  logToFile("🟢 Server started");
 });
