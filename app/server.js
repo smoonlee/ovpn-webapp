@@ -9,7 +9,7 @@ const { SecretClient } = require("@azure/keyvault-secrets");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static("public"));
+app.use(express.static("app"));
 app.use(bodyParser.json({ limit: "1mb" }));
 
 const vpnHosts = {
@@ -18,19 +18,32 @@ const vpnHosts = {
   atimo: { host: "132.220.15.55", username: "appsvc_ovpn" },
 };
 
-const managedIdentityClientId = process.env.MANAGED_IDENTITY_CLIENT_ID;
 const keyVaultName = process.env.KEYVAULT_NAME || "kv-ovpn-webapp-dev";
 const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
 
-const credential = new DefaultAzureCredential({
-  managedIdentityClientId: managedIdentityClientId,
-});
-
+const credential = new DefaultAzureCredential();
 const secretClient = new SecretClient(vaultUrl, credential);
 
-async function getSshPrivateKey() {
-  const secret = await secretClient.getSecret("ssh-private-key");
-  return secret.value;
+// Implement retry logic for Key Vault operations
+async function getSshPrivateKey(retryCount = 3) {
+  let lastError;
+  for (let i = 0; i < retryCount; i++) {
+    try {
+      const secret = await secretClient.getSecret("ssh-private-key");
+      return secret.value;
+    } catch (err) {
+      lastError = err;
+      if (i < retryCount - 1) {
+        // Exponential backoff: wait 1s, 2s, 4s between retries
+        await new Promise(
+          (resolve) => setTimeout(resolve, Math.pow(2, i) * 1000)
+        );
+      }
+    }
+  }
+  throw new Error(
+    `Failed to retrieve SSH key after ${retryCount} attempts: ${lastError.message}`
+  );
 }
 
 const logDir = "/var/log/ovpn-web";
@@ -115,6 +128,26 @@ app.post("/api/generate", async (req, res) => {
   } finally {
     ssh.dispose();
     log("🔌 SSH connection closed\n");
+  }
+});
+
+// Add a new route to get a secret value
+app.get("/api/secret/:secretName", async (req, res) => {
+  const secretName = req.params.secretName;
+
+  try {
+    // Implement retry logic with exponential backoff
+    const secret = await secretClient.getSecret(secretName);
+    res.json({
+      message: `Secret '${secretName}' retrieved successfully`,
+      value: secret.value,
+    });
+  } catch (error) {
+    console.error(`Error retrieving secret '${secretName}':`, error.message);
+    res.status(500).json({
+      error: "Failed to retrieve secret",
+      message: error.message,
+    });
   }
 });
 

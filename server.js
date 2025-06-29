@@ -9,7 +9,7 @@ const { SecretClient } = require("@azure/keyvault-secrets");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static("public"));
+app.use(express.static("app"));
 app.use(bodyParser.json({ limit: "1mb" }));
 
 const vpnHosts = {
@@ -128,6 +128,26 @@ app.post("/api/generate", async (req, res) => {
   } finally {
     ssh.dispose();
     log("🔌 SSH connection closed\n");
+  }
+});
+
+// Add a new route to get a secret value
+app.get("/api/secret/:secretName", async (req, res) => {
+  const secretName = req.params.secretName;
+
+  try {
+    // Implement retry logic with exponential backoff
+    const secret = await secretClient.getSecret(secretName);
+    res.json({
+      message: `Secret '${secretName}' retrieved successfully`,
+      value: secret.value,
+    });
+  } catch (error) {
+    console.error(`Error retrieving secret '${secretName}':`, error.message);
+    res.status(500).json({
+      error: "Failed to retrieve secret",
+      message: error.message,
+    });
   }
 });
 
