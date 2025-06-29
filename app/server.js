@@ -249,20 +249,14 @@ app.post("/connect", async (req, res) => {
       ].join("\n");
 
       console.log("[Debug] Creating CCD profile");
-      await execCommand(
-        `echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`
-      );
+      await execCommand(`echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`);
 
-      // Add IP route for client network via tun0
-      console.log("[Debug] Adding IP route");
-      await writeToLog(
-        `Adding IP route for client network: ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]}`
-      );
-      
-      console.log("[Debug] Executing IP route command");
-      await execCommand(
-        `ip route add ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]} dev tun0`
-      );
+    // Add IP route for client network via tun0
+    console.log("[Debug] Adding IP route");
+    await writeToLog(`Adding IP route for client network: ${customerNetworkInfo.network}`);
+    
+    console.log("[Debug] Executing IP route command");
+    await execCommand(`ip route add ${customerNetworkInfo.network} dev tun0`);
 
       // Read generated certificates
       console.log("[Debug] Reading client key");
