@@ -136,18 +136,6 @@ app.post("/connect", async (req, res) => {
         );
       }
 
-      // Create logging directory if it doesn't exist
-      await execCommand("mkdir -p /var/log/ovpnsetup");
-
-      // Function to write to log file
-      const writeToLog = async (message) => {
-        const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] ${message}\n`;
-        await execCommand(
-          `echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`
-        );
-      };
-
       // Create a function to execute commands and handle their output
       const execCommand = (cmd) => {
         return new Promise((resolve, reject) => {
