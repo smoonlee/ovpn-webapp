@@ -5,9 +5,16 @@ const os = require("os");
 const { exec } = require("child_process");
 const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
+const { Client } = require('ssh2');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Azure Key Vault configuration
+const keyVaultName = process.env.KEY_VAULT_NAME;
+const keyVaultUrl = `https://${keyVaultName}.vault.azure.net`;
+const credential = new DefaultAzureCredential();
+const secretClient = new SecretClient(keyVaultUrl, credential);
 
 // Middleware
 app.use((req, res, next) => {
@@ -26,93 +33,81 @@ const serverIPs = {
   app3: "3.4.5.6",
 };
 
-function getServerIP(name) {
-  return serverIPs[name] || "0.0.0.0";
+// Function to retrieve SSH key from Key Vault
+async function getSSHKey(keyName) {
+  try {
+    const secret = await secretClient.getSecret(keyName);
+    return secret.value;
+  } catch (error) {
+    console.error('Error retrieving SSH key from Key Vault:', error.message);
+    throw error;
+  }
 }
 
-// Fetch SSH private key from Azure Key Vault
-async function getSSHKeyFromVault(vaultName, secretName) {
-  const credential = new DefaultAzureCredential();
-  const vaultUrl = `https://${vaultName}.vault.azure.net`;
-  const client = new SecretClient(vaultUrl, credential);
-  const secret = await client.getSecret(secretName);
-  return secret.value;
+// Function to establish SSH connection
+async function connectSSH(serverIP, privateKey) {
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+    
+    conn.on('ready', () => {
+      console.log('SSH Connection established');
+      resolve(conn);
+    }).on('error', (err) => {
+      console.error('SSH Connection error:', err);
+      reject(err);
+    }).connect({
+      host: serverIP,
+      username: process.env.SSH_USERNAME || 'appsvc_ovpn',
+      privateKey: privateKey,
+      algorithms: {
+        kex: [
+          'curve25519-sha256',
+          'curve25519-sha256@libssh.org',
+          'ecdh-sha2-nistp256',
+          'ecdh-sha2-nistp384',
+          'ecdh-sha2-nistp521',
+          'diffie-hellman-group-exchange-sha256'
+        ]
+      }
+    });
+  });
 }
 
-// POST /connect - start SSH session and respond with a message
-app.post("/connect", async (req, res) => {
-  console.log('Received POST request to /connect');
-  console.log('Request body:', req.body);
-
-  const { server, customerName, azureSubnet, customerNetwork } = req.body;
-
-  if (!server || !customerName || !azureSubnet || !customerNetwork) {
-    console.log('Missing fields:', { server, customerName, azureSubnet, customerNetwork });
-    return res.status(400).send("Missing required fields.");
+// Connect endpoint to establish SSH connection
+app.post('/connect', async (req, res) => {
+  const { server, keyName } = req.body;
+  
+  if (!server || !keyName) {
+    return res.status(400).json({ error: 'Server and key name are required' });
   }
 
-  const vaultName = process.env.KEYVAULT_NAME;
-  const secretName = process.env.SSH_SECRET_NAME;
-
-  console.log('Environment Variables Check:');
-  console.log('KEYVAULT_NAME:', vaultName || 'not set');
-  console.log('SSH_SECRET_NAME:', secretName || 'not set');
-  console.log('All environment variables:', process.env);
-
-  if (!vaultName || !secretName) {
-    return res.status(500).send("Key Vault environment variables not set.");
+  const serverIP = serverIPs[server];
+  if (!serverIP) {
+    return res.status(404).json({ error: 'Server not found' });
   }
 
   try {
-    // Fetch SSH private key
-    const sshPrivateKey = await getSSHKeyFromVault(vaultName, secretName);
+    // Retrieve SSH key from Key Vault
+    const sshKey = await getSSHKey(keyName);
     
-    // Send response confirming SSH key retrieval
-    res.json({ message: "ssh_key_retrieved", status: "success" });
-
-    // Write private key to a temp file with proper permissions
-    const tempKeyPath = path.join(
-      os.tmpdir(),
-      `${customerName.replace(/\s+/g, "_")}_id_rsa`
-    );
-    await fs.writeFile(tempKeyPath, sshPrivateKey, { mode: 0o600 });
-
-    // Start SSH connection (server-side)
-    const serverIP = getServerIP(server);
-        const sshCommand = `ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no appsvc_ovpn@${serverIP} "echo 'hello_dev' > ~/hello_dev"`;
-
-    console.log(`Starting SSH session to ${server} at ${serverIP}...`);
-
-    const sshProcess = exec(sshCommand, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`SSH error: ${error.message}`);
-        return;
-      }
-      if (stderr) {
-        console.error(`SSH stderr: ${stderr}`);
-      }
-      console.log(`SSH stdout: ${stdout}`);
+    // Establish SSH connection
+    const connection = await connectSSH(serverIP, sshKey);
+    
+    // You might want to store the connection object in a session or handle it as needed
+    res.json({ message: 'Successfully connected', server: serverIP });
+    
+    // Handle connection cleanup when needed
+    connection.on('end', () => {
+      console.log('SSH Connection ended');
     });
-
-    sshProcess.stdout.pipe(process.stdout);
-    sshProcess.stderr.pipe(process.stderr);
-    sshProcess.stdin.pipe(process.stdin);
-
-    sshProcess.on("exit", async () => {
-      await fs.unlink(tempKeyPath).catch(() => {});
-      console.log("SSH session ended and private key cleaned up.");
-    });
+    
   } catch (error) {
-    console.error("Error in /connect:", error);
-    res.status(500).send("Failed to retrieve SSH key or start SSH session.");
+    console.error('Connection error:', error);
+    res.status(500).json({ error: 'Failed to establish connection', details: error.message });
   }
 });
 
-// Serve your index.html at root
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
+// Start the server
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
