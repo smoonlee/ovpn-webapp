@@ -205,6 +205,10 @@ app.post('/connect', async (req, res) => {
       
       await execCommand(`echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`);
       
+      // Add IP route for client network via tun0
+      await writeToLog(`Adding IP route for client network: ${customerNetworkInfo.network}/${customerNetwork.split('/')[1]}`);
+      await execCommand(`ip route add ${customerNetworkInfo.network}/${customerNetwork.split('/')[1]} dev tun0`);
+      
       // Read generated certificates
       const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
       const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
