@@ -3,7 +3,7 @@ const path = require("path");
 const bodyParser = require("body-parser");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Use the port Azure expects or fallback to 3000
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
