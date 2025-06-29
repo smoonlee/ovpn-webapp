@@ -188,6 +188,30 @@ app.post('/connect', async (req, res) => {
       // Get CA password from Key Vault
       const caPassword = await getSSHKey('ovpn-ca');
       
+      // Cleanup existing certificates and routes if they exist
+      console.log(`Cleaning up existing certificates for customer: ${customerName}`);
+      await writeToLog(`Starting cleanup process for customer: ${customerName}`);
+      
+      try {
+        // Remove existing route if it exists
+        await execCommand(`ip route del ${customerNetwork} dev tun0 2>/dev/null || true`);
+        
+        // Remove existing certificates
+        await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/private/${customerName}.key 2>/dev/null || true`);
+        await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/reqs/${customerName}.req 2>/dev/null || true`);
+        await execCommand(`rm -f /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt 2>/dev/null || true`);
+        
+        // Remove CCD file
+        await execCommand(`rm -f /etc/openvpn/ccd/${customerName} 2>/dev/null || true`);
+        
+        // Clean up index.txt entries (if they exist)
+        await execCommand(`cd /etc/openvpn/easy-rsa && sed -i "/${customerName}/d" pki/index.txt 2>/dev/null || true`);
+        
+        await writeToLog('Cleanup completed successfully');
+      } catch (cleanupError) {
+        await writeToLog(`Cleanup warning (non-fatal): ${cleanupError.message}`);
+      }
+      
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
       await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
