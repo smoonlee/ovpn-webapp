@@ -51,11 +51,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Server IP mapping
+// Load server IPs from environment variables
 const serverIPs = {
-  app1: "20.4.208.94",
-  app2: "2.3.4.5",
-  app3: "3.4.5.6",
+  app1: process.env.OVPN_SERVER1_IP,
+  app2: process.env.OVPN_SERVER2_IP,
+  app3: process.env.OVPN_SERVER3_IP,
 };
 
 // Function to retrieve SSH key from Key Vault
@@ -101,18 +101,43 @@ async function connectSSH(serverIP, privateKey) {
   });
 }
 
+// Function to validate CIDR notation
+function validateCIDR(cidr) {
+  const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+  if (!cidrRegex.test(cidr)) {
+    throw new Error("Invalid CIDR format");
+  }
+  const [ip, bits] = cidr.split("/");
+  const parts = ip.split(".");
+  const validIP = parts.every((part) => {
+    const num = parseInt(part, 10);
+    return num >= 0 && num <= 255;
+  });
+  const validBits = parseInt(bits, 10) >= 0 && parseInt(bits, 10) <= 32;
+  if (!validIP || !validBits) {
+    throw new Error("Invalid IP address or subnet mask bits");
+  }
+}
+
 // Connect endpoint to establish SSH connection
 app.post("/connect", async (req, res) => {
-  const { server } = req.body;
+  const { server, customerName, customerNetwork, azureSubnet } = req.body;
   const keyName = process.env.SSH_SECRET_NAME;
 
-  if (!server || !keyName) {
-    return res
-      .status(400)
-      .json({
-        error:
-          "Server name and SSH_SECRET_NAME environment variable are required",
-      });
+  // Validate required fields
+  if (!server || !keyName || !customerName || !customerNetwork || !azureSubnet) {
+    return res.status(400).json({
+      error:
+        "Server name, customer name, customer network, Azure subnet, and SSH_SECRET_NAME are required",
+    });
+  }
+
+  // Validate CIDR formats
+  try {
+    validateCIDR(customerNetwork);
+    validateCIDR(azureSubnet);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
   }
 
   const serverIP = serverIPs[server];
@@ -129,13 +154,6 @@ app.post("/connect", async (req, res) => {
 
     // Execute commands to create certificates and CCD profile
     try {
-      const { customerName, customerNetwork, azureSubnet } = req.body;
-      if (!customerName || !customerNetwork || !azureSubnet) {
-        throw new Error(
-          "Customer name, customer network, and Azure subnet are required"
-        );
-      }
-
       // Create logging directory if it doesn't exist
       await execCommand("mkdir -p /var/log/ovpnsetup");
 
@@ -148,7 +166,7 @@ app.post("/connect", async (req, res) => {
         );
       };
 
-      // Create a function to execute commands and handle their output
+      // Function to execute SSH commands with proper error handling
       const execCommand = (cmd) => {
         return new Promise((resolve, reject) => {
           let timeoutId;
@@ -201,20 +219,11 @@ app.post("/connect", async (req, res) => {
         });
       };
 
-      // Get CA password from Key Vault
-      const caPassword = await getSSHKey("ovpn-ca");
-
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
-      await writeToLog(
-        `Starting certificate creation process for customer: ${customerName}`
-      );
-      await execCommand(
-        `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`
-      );
-      await execCommand(
-        `cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`
-      );
+      await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
 
       // Create CCD profile
       const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
