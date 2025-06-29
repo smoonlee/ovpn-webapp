@@ -126,21 +126,37 @@ app.post('/connect', async (req, res) => {
         throw new Error('Customer name, customer network, and Azure subnet are required');
       }
 
+      // Create logging directory if it doesn't exist
+      await execCommand('mkdir -p /var/log/ovpnsetup');
+
+      // Function to write to log file
+      const writeToLog = async (message) => {
+        const timestamp = new Date().toISOString();
+        const logEntry = `[${timestamp}] ${message}\n`;
+        await execCommand(`echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`);
+      };
+
       // Create a function to execute commands and handle their output
       const execCommand = (cmd) => {
         return new Promise((resolve, reject) => {
           let timeoutId;
-          const TIMEOUT_MS = 10000; // 10 seconds
+          const TIMEOUT_MS = 30000; // 30 seconds
           
-          connection.exec(cmd, (err, stream) => {
-            if (err) reject(err);
+          connection.exec(cmd, async (err, stream) => {
+            if (err) {
+              await writeToLog(`Error executing command: ${cmd}\nError: ${err.message}`);
+              reject(err);
+              return;
+            }
             
             let output = '';
             
             // Set timeout
-            timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(async () => {
               stream.end();
-              reject(new Error(`Command timed out after ${TIMEOUT_MS/1000} seconds: ${cmd}\nPartial output: ${output}`));
+              const timeoutError = `Command timed out after ${TIMEOUT_MS/1000} seconds: ${cmd}\nPartial output: ${output}`;
+              await writeToLog(timeoutError);
+              reject(new Error(timeoutError));
             }, TIMEOUT_MS);
             
             stream.on('data', (data) => {
@@ -151,15 +167,18 @@ app.post('/connect', async (req, res) => {
               output += data;
             });
             
-            stream.on('close', () => {
+            stream.on('close', async () => {
               clearTimeout(timeoutId);
+              await writeToLog(`Command completed: ${cmd}\nOutput: ${output}`);
               resolve(output);
             });
             
-            stream.on('exit', (code, signal) => {
+            stream.on('exit', async (code, signal) => {
               if (code !== 0) {
                 clearTimeout(timeoutId);
-                reject(new Error(`Command failed with code ${code}: ${cmd}\nOutput: ${output}`));
+                const errorMsg = `Command failed with code ${code}: ${cmd}\nOutput: ${output}`;
+                await writeToLog(errorMsg);
+                reject(new Error(errorMsg));
               }
             });
           });
@@ -171,6 +190,7 @@ app.post('/connect', async (req, res) => {
       
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
+      await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
       
