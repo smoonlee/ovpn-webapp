@@ -257,25 +257,51 @@ app.post("/connect", async (req, res) => {
       // Read generated certificates
       console.log("[Debug] Reading client key");
       const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
-
+      
       console.log("[Debug] Reading client certificate");
       const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
-
+      
       console.log("[Debug] Reading CA certificate");
       const caCert = await execCommand("cat /etc/openvpn/easy-rsa/pki/ca.crt");
+
+      // Create OVPN configuration
+      const ovpnConfig = [
+        "client",
+        "dev tun",
+        "proto tcp",
+        "remote " + serverIP + " 443",
+        "resolv-retry infinite",
+        "nobind",
+        "persist-key",
+        "persist-tun",
+        "remote-cert-tls server",
+        "cipher AES-256-GCM",
+        "auth SHA256",
+        "key-direction 1",
+        "verb 4",
+        "",
+        "<ca>",
+        caCert.trim(),
+        "</ca>",
+        "",
+        "<cert>",
+        clientCert.trim().split('\n').slice(1, -1).join('\n'), // Remove header and footer
+        "</cert>",
+        "",
+        "<key>",
+        clientKey.trim(),
+        "</key>",
+        "",
+      ].join("\n");
 
       // Close the connection
       connection.end();
 
-      res.json({
-        message: "Successfully created certificates and CCD profile",
-        server: serverIP,
-        certificates: {
-          clientKey: clientKey.trim(),
-          clientCert: clientCert.trim(),
-          caCert: caCert.trim(),
-        },
+      res.set({
+        'Content-Type': 'application/x-openvpn-profile',
+        'Content-Disposition': `attachment; filename="${customerName}.ovpn"`,
       });
+      res.send(ovpnConfig);
     } catch (sshError) {
       connection.end();
       throw new Error(`SSH Command execution failed: ${sshError.message}`);
