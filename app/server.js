@@ -256,20 +256,21 @@ app.post("/connect", async (req, res) => {
 
       // Read generated certificates
       console.log("[Debug] Reading client key");
-      const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
+      const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key | awk '/BEGIN PRIVATE KEY/,/END PRIVATE KEY/'`);
       
       console.log("[Debug] Reading client certificate");
-      const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
+      // Using awk to extract just the certificate portion with BEGIN/END markers
+      const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/'`);
       
       console.log("[Debug] Reading CA certificate");
-      const caCert = await execCommand("cat /etc/openvpn/easy-rsa/pki/ca.crt");
+      const caCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/ca.crt | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/'`);
 
       // Create OVPN configuration
       const ovpnConfig = [
         "client",
         "dev tun",
         "proto tcp",
-        "remote " + serverIP + " 443",
+        "remote " + serverIP + " 1194",
         "resolv-retry infinite",
         "nobind",
         "persist-key",
@@ -285,7 +286,7 @@ app.post("/connect", async (req, res) => {
         "</ca>",
         "",
         "<cert>",
-        clientCert.trim().split('\n').slice(1, -1).join('\n'), // Remove header and footer
+        clientCert.trim(),
         "</cert>",
         "",
         "<key>",
