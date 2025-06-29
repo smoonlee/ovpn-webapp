@@ -228,10 +228,10 @@ app.post("/connect", async (req, res) => {
       // Execute certificate creation commands
       console.log("[Debug] Starting certificate creation process");
       await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
-      
+
       console.log("[Debug] Generating certificate request");
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
-      
+
       console.log("[Debug] Signing certificate request");
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
 
@@ -249,18 +249,18 @@ app.post("/connect", async (req, res) => {
 
     // Add IP route for client network via tun0
     console.log("[Debug] Adding IP route");
-    await writeToLog(`Adding IP route for client network: ${customerNetworkInfo.network}`);
-    
+    await writeToLog(`Adding IP route for client network: ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]}`);
+
     console.log("[Debug] Executing IP route command");
-    await execCommand(`ip route add ${customerNetworkInfo.network} dev tun0`);
+    await execCommand(`sudo ip route add ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]} dev tun0`);
 
       // Read generated certificates
       console.log("[Debug] Reading client key");
       const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
-      
+
       console.log("[Debug] Reading client certificate");
       const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
-      
+
       console.log("[Debug] Reading CA certificate");
       const caCert = await execCommand("cat /etc/openvpn/easy-rsa/pki/ca.crt");
 
