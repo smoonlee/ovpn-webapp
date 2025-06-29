@@ -221,9 +221,32 @@ app.post("/connect", async (req, res) => {
         );
       };
 
+      console.log("[Debug] Converting network information");
       // Convert CIDR notations to network/mask format
       const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
       const azureSubnetInfo = cidrToNetworkAndMask(azureSubnet);
+
+      // Validate the network info objects were created correctly
+      if (!customerNetworkInfo || !customerNetworkInfo.network || !customerNetworkInfo.mask) {
+        throw new Error(`Failed to convert customer network CIDR ${customerNetwork} to network/mask format`);
+      }
+      if (!azureSubnetInfo || !azureSubnetInfo.network || !azureSubnetInfo.mask) {
+        throw new Error(`Failed to convert Azure subnet CIDR ${azureSubnet} to network/mask format`);
+      }
+
+      // Log the network information for debugging
+      console.log("[Debug] Network information:", {
+        customerNetwork: {
+          cidr: customerNetwork,
+          network: customerNetworkInfo.network,
+          mask: customerNetworkInfo.mask
+        },
+        azureSubnet: {
+          cidr: azureSubnet,
+          network: azureSubnetInfo.network,
+          mask: azureSubnetInfo.mask
+        }
+      });
 
       // Create logging directory if it doesn't exist
       console.log("[Debug] Creating initial logging directory");
