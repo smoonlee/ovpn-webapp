@@ -24,7 +24,7 @@ const vpnHosts = {
 const managedIdentityClientId = process.env.MANAGED_IDENTITY_CLIENT_ID;
 
 // Azure Key Vault info
-const keyVaultName = process.env.KEYVAULT_NAME || "kv-ovpn-webapp-dev";
+const keyVaultName = process.env.KEYVAULT_NAME;
 const vaultUrl = `https://${keyVaultName}.vault.azure.net`;
 
 // Create credential once
