@@ -139,10 +139,13 @@ app.post("/connect", async (req, res) => {
       // Create logging directory if it doesn't exist
       await execCommand("mkdir -p /var/log/ovpnsetup");
 
-      // Function to write to log file
-      const writeToLog = async (message) => {
+      // Function to write to log file with verbosity levels
+      const writeToLog = async (message, level = 'INFO', details = '') => {
         const timestamp = new Date().toISOString();
-        const logEntry = `[${timestamp}] ${message}\n`;
+        let logEntry = `[${timestamp}] [${level}] ${message}\n`;
+        if (details) {
+          logEntry += `${details.split('\n').map(line => `  → ${line}`).join('\n')}\n`;
+        }
         await execCommand(
           `echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`
         );
@@ -185,7 +188,8 @@ app.post("/connect", async (req, res) => {
 
             stream.on("close", async () => {
               clearTimeout(timeoutId);
-              await writeToLog(`Command completed: ${cmd}\nOutput: ${output}`);
+              await writeToLog(`Command execution completed`, 'INFO', 
+                `Command: ${cmd}\nOutput:\n${output}`);
               resolve(output);
             });
 
@@ -193,8 +197,12 @@ app.post("/connect", async (req, res) => {
               if (code !== 0) {
                 clearTimeout(timeoutId);
                 const errorMsg = `Command failed with code ${code}: ${cmd}\nOutput: ${output}`;
-                await writeToLog(errorMsg);
+                await writeToLog(`Command execution failed with code ${code}`, 'ERROR',
+                  `Command: ${cmd}\nExit Code: ${code}\nSignal: ${signal}\nOutput:\n${output}`);
                 reject(new Error(errorMsg));
+              } else {
+                await writeToLog(`Command execution successful`, 'SUCCESS',
+                  `Command: ${cmd}\nExit Code: ${code}`);
               }
             });
           });
@@ -202,12 +210,17 @@ app.post("/connect", async (req, res) => {
       };
 
       // Get CA password from Key Vault
+      await writeToLog('Starting OpenVPN certificate creation process', 'START');
+      await writeToLog('Retrieving CA password from Key Vault', 'INFO');
       const caPassword = await getSSHKey("ovpn-ca");
+      await writeToLog('Successfully retrieved CA password', 'SUCCESS');
 
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
       await writeToLog(
-        `Starting certificate creation process for customer: ${customerName}`
+        `Starting certificate creation for customer: ${customerName}`,
+        'INFO',
+        `Customer Network: ${customerNetwork}\nAzure Subnet: ${azureSubnet}`
       );
       await execCommand(
         `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`
@@ -229,17 +242,26 @@ app.post("/connect", async (req, res) => {
         `echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`
       );
 
+      await writeToLog('Reading generated certificates and keys', 'INFO');
+      
       // Read generated certificates
       const clientKey = await execCommand(
         `cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`
       );
+      await writeToLog('Successfully read client private key', 'SUCCESS');
+      
       const clientCert = await execCommand(
         `cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`
       );
+      await writeToLog('Successfully read client certificate', 'SUCCESS');
+      
       const caCert = await execCommand("cat /etc/openvpn/easy-rsa/pki/ca.crt");
+      await writeToLog('Successfully read CA certificate', 'SUCCESS');
 
       // Close the connection
       connection.end();
+      await writeToLog('Certificate creation process completed', 'END',
+        `Summary:\n- Client Key: ${clientKey.length} bytes\n- Client Cert: ${clientCert.length} bytes\n- CA Cert: ${caCert.length} bytes`);
 
       res.json({
         message: "Successfully created certificates and CCD profile",
