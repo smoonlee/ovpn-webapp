@@ -146,10 +146,13 @@ app.post('/connect', async (req, res) => {
         });
       };
 
+      // Get CA password from Key Vault
+      const caPassword = await getSSHKey('ovpn-ca');
+      
       // Execute certificate creation commands
       console.log(`Creating certificates for customer: ${customerName}`);
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa gen-req ${customerName} nopass`);
-      await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa sign-req client ${customerName}`);
+      await execCommand(`cd /etc/openvpn/easy-rsa && echo "${caPassword}" | ./easyrsa sign-req client ${customerName} yes`);
       
       // Create CCD profile
       const customerNetworkInfo = cidrToNetworkAndMask(customerNetwork);
