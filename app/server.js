@@ -107,10 +107,12 @@ app.post("/connect", async (req, res) => {
   const keyName = process.env.SSH_SECRET_NAME;
 
   if (!server || !keyName) {
-    return res.status(400).json({
-      error:
-        "Server name and SSH_SECRET_NAME environment variable are required",
-    });
+    return res
+      .status(400)
+      .json({
+        error:
+          "Server name and SSH_SECRET_NAME environment variable are required",
+      });
   }
 
   const serverIP = serverIPs[server];
@@ -227,6 +229,18 @@ app.post("/connect", async (req, res) => {
         `echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`
       );
 
+      // Add IP route for client network via tun0
+      await writeToLog(
+        `Adding IP route for client network: ${customerNetworkInfo.network}/${
+          customerNetwork.split("/")[1]
+        }`
+      );
+      await execCommand(
+        `ip route add ${customerNetworkInfo.network}/${
+          customerNetwork.split("/")[1]
+        } dev tun0`
+      );
+
       // Read generated certificates
       const clientKey = await execCommand(
         `cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`
@@ -259,10 +273,12 @@ app.post("/connect", async (req, res) => {
     });
   } catch (error) {
     console.error("Connection error:", error);
-    res.status(500).json({
-      error: "Failed to establish connection",
-      details: error.message,
-    });
+    res
+      .status(500)
+      .json({
+        error: "Failed to establish connection",
+        details: error.message,
+      });
   }
 });
 
