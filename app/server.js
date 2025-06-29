@@ -10,9 +10,14 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 // Middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 
 // Server IP mapping
 const serverIPs = {
@@ -36,9 +41,13 @@ async function getSSHKeyFromVault(vaultName, secretName) {
 
 // POST /connect - start SSH session and respond with a message
 app.post("/connect", async (req, res) => {
+  console.log('Received POST request to /connect');
+  console.log('Request body:', req.body);
+  
   const { server, customerName, azureSubnet, customerNetwork } = req.body;
 
   if (!server || !customerName || !azureSubnet || !customerNetwork) {
+    console.log('Missing fields:', { server, customerName, azureSubnet, customerNetwork });
     return res.status(400).send("Missing required fields.");
   }
 
@@ -94,9 +103,9 @@ app.post("/connect", async (req, res) => {
   }
 });
 
-// Serve your index.html at root (if you have one)
+// Serve your index.html at root
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
