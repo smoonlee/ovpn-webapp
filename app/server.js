@@ -143,9 +143,8 @@ app.post("/connect", async (req, res) => {
       const writeToLog = async (message) => {
         const timestamp = new Date().toISOString();
         const logEntry = `[${timestamp}] ${message}\n`;
-        await fs.appendFile(
-          `/var/log/ovpnsetup/${customerName}.log`,
-          logEntry
+        await execCommand(
+          `echo "${logEntry}" >> /var/log/ovpnsetup/${customerName}.log`
         );
       };
 
