@@ -154,11 +154,9 @@ app.post("/connect", async (req, res) => {
 
     // Execute commands to create certificates and CCD profile
     try {
-      // Create logging directory if it doesn't exist
-      await execCommand("mkdir -p /var/log/ovpnsetup");
-
       // Function to execute SSH commands with proper error handling
       const execCommand = (cmd) => {
+        console.log("[Debug] Executing command:", cmd);
         return new Promise((resolve, reject) => {
           let timeoutId;
           const TIMEOUT_MS = 30000; // 30 seconds
@@ -212,6 +210,7 @@ app.post("/connect", async (req, res) => {
 
       // Function to write to log file
       const writeToLog = async (message) => {
+        console.log("[Debug] Attempting to write to log:", message);
         const timestamp = new Date().toISOString();
         const logEntry = `[${timestamp}] ${message}\n`;
         await execCommand(
@@ -219,10 +218,18 @@ app.post("/connect", async (req, res) => {
         );
       };
 
+      // Create logging directory if it doesn't exist
+      console.log("[Debug] Attempting to create logging directory");
+      await execCommand("mkdir -p /var/log/ovpnsetup");
+
       // Execute certificate creation commands
-      console.log(`Creating certificates for customer: ${customerName}`);
+      console.log("[Debug] Starting certificate creation process");
       await writeToLog(`Starting certificate creation process for customer: ${customerName}`);
+      
+      console.log("[Debug] Generating certificate request");
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
+      
+      console.log("[Debug] Signing certificate request");
       await execCommand(`cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`);
 
       // Create CCD profile
@@ -234,21 +241,30 @@ app.post("/connect", async (req, res) => {
         `push "route ${azureSubnetInfo.network} ${azureSubnetInfo.mask}"`,
       ].join("\n");
 
+      console.log("[Debug] Creating CCD profile");
       await execCommand(
         `echo "${ccdContent}" > /etc/openvpn/ccd/${customerName}`
       );
 
       // Add IP route for client network via tun0
+      console.log("[Debug] Adding IP route");
       await writeToLog(
         `Adding IP route for client network: ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]}`
       );
+      
+      console.log("[Debug] Executing IP route command");
       await execCommand(
         `ip route add ${customerNetworkInfo.network}/${customerNetwork.split("/")[1]} dev tun0`
       );
 
       // Read generated certificates
+      console.log("[Debug] Reading client key");
       const clientKey = await execCommand(`cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`);
+      
+      console.log("[Debug] Reading client certificate");
       const clientCert = await execCommand(`cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`);
+      
+      console.log("[Debug] Reading CA certificate");
       const caCert = await execCommand("cat /etc/openvpn/easy-rsa/pki/ca.crt");
 
       // Close the connection
