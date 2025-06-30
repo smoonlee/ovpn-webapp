@@ -172,15 +172,18 @@ app.post("/connect", async (req, res) => {
     const connection = await connectSSH(serverIP, sshKey);
 
     try {
+      broadcast("Converting network configurations...", "info");
       // Convert Networks
       const custInfo = cidrToNetworkAndMask(customerNetwork);
       const azInfo = cidrToNetworkAndMask(azureSubnet);
       const bits = customerNetwork.split("/")[1];
 
+      broadcast("Setting up OpenVPN environment...", "info");
       // Ensure log dir exists
       await execCommand(connection, "mkdir -p /var/log/ovpnsetup");
 
       // Clean up previous state
+      broadcast("Cleaning up any existing configurations...", "info");
       await execCommand(connection, `rm -f /etc/openvpn/ccd/${customerName}`);
       await execCommand(
         connection,
@@ -204,16 +207,19 @@ app.post("/connect", async (req, res) => {
       );
 
       // Generate cert
+      broadcast("Generating client certificate...", "info");
       await execCommand(
         connection,
         `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`
       );
+      broadcast("Signing client certificate...", "info");
       await execCommand(
         connection,
         `cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`
       );
 
       // CCD
+      broadcast("Creating client configuration...", "info");
       const ccd = `ifconfig-push ${custInfo.network} ${custInfo.mask}\npush "route ${azInfo.network} ${azInfo.mask}"`;
       await execCommand(
         connection,
@@ -221,6 +227,7 @@ app.post("/connect", async (req, res) => {
       );
 
       // Add route
+      broadcast("Configuring network routes...", "info");
       await execCommand(
         connection,
         `sudo ip route add ${custInfo.network}/${bits} dev tun0`
