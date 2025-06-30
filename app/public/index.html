@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>OpenVPN Configurator</title>
   <style>
-    /* Ensure consistent box-sizing across all elements */
     *, *::before, *::after {
       box-sizing: border-box;
     }
@@ -136,12 +135,17 @@
       background-color: #0056b3;
     }
 
+    #clearConsole {
+      margin-top: 10px;
+      background-color: #6c757d;
+    }
+
     @media (max-width: 1024px) {
       .container {
         flex-direction: column;
         align-items: center;
       }
-      
+
       .console-container {
         max-width: 600px;
         height: 400px;
@@ -165,48 +169,38 @@
       <h2>OpenVPN Configurator</h2>
 
       <label for="server">Select Server:</label>
-    <select id="server" name="server" required>
-      <option value="">-- Choose a server --</option>
-      <option value="app1">App1 (20.4.208.94)</option>
-      <option value="app2">App2 (2.3.4.5)</option>
-      <option value="app3">App3 (3.4.5.6)</option>
-    </select>
+      <select id="server" name="server" required>
+        <option value="">-- Choose a server --</option>
+        <option value="app1">App1 (20.4.208.94)</option>
+        <option value="app2">App2 (2.3.4.5)</option>
+        <option value="app3">App3 (3.4.5.6)</option>
+      </select>
 
-    <label for="customerName">Customer Name:</label>
-    <input type="text" id="customerName" name="customerName" placeholder="e.g. Acme Corp" required>
+      <label for="customerName">Customer Name:</label>
+      <input type="text" id="customerName" name="customerName" placeholder="e.g. Acme Corp" required>
 
-    <label for="azureSubnet">Azure Subnet:</label>
-    <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required>
+      <label for="azureSubnet">Azure Subnet:</label>
+      <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required>
 
-    <label for="customerNetwork">Customer Network:</label>
-    <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required>
+      <label for="customerNetwork">Customer Network:</label>
+      <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required>
 
-    <button type="submit">Generate</button>
-  </form>
+      <button type="submit">Generate</button>
+      <button type="button" id="clearConsole">Clear Console</button>
+    </form>
 
-  <div class="console-container">
-    <div id="console" class="console-output"></div>
+    <div class="console-container">
+      <div id="console" class="console-output" role="log" aria-live="polite"></div>
+    </div>
   </div>
-</div>
 
 <script>
-// Initialize WebSocket connection (HTTPS only)
 const consoleOutput = document.getElementById('console');
 consoleOutput.innerHTML = '';
 
-let ws;
-
-if (window.location.protocol !== 'https:') {
-  log('Error: This application requires a secure HTTPS connection.', 'error');
-  log('Please access this page using HTTPS.', 'error');
-} else {
-  try {
-    ws = new WebSocket(`wss://${window.location.host}`);
-  } catch (error) {
-    log('Failed to establish secure WebSocket connection', 'error');
-    console.error('WebSocket initialization error:', error);
-  }
-}
+document.getElementById('clearConsole').addEventListener('click', () => {
+  consoleOutput.innerHTML = '';
+});
 
 function log(message, type = 'info') {
   const timestamp = new Date().toISOString();
@@ -216,69 +210,88 @@ function log(message, type = 'info') {
   consoleOutput.scrollTop = consoleOutput.scrollHeight;
 }
 
-// WebSocket event handlers (only set up if HTTPS is used)
-if (ws) {
-  ws.onopen = () => {
-    log('Secure WebSocket connection established', 'success');
-  };
+function isValidCIDR(cidr) {
+  return /^([0-9]{1,3}\.){3}[0-9]{1,3}\/([0-9]|[1-2][0-9]|3[0-2])$/.test(cidr);
+}
 
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      log(data.message, data.type);
-    } catch (error) {
-      log(`Error parsing WebSocket message: ${error.message}`, 'error');
-      console.error('WebSocket message parse error:', error);
-    }
-  };
+let ws;
 
-  ws.onclose = (event) => {
-    log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason || 'none'})`, 'error');
-    // Only attempt to reconnect if we're still on HTTPS
-    if (window.location.protocol === 'https:') {
-      setTimeout(() => {
-        log('Attempting to reconnect...', 'info');
-        try {
-          const newWs = new WebSocket(`wss://${window.location.host}`);
-          // Transfer all event handlers to the new WebSocket
-          Object.assign(newWs, ws);
-          ws = newWs;
-        } catch (error) {
-          log('Reconnection failed', 'error');
-          console.error('WebSocket reconnection error:', error);
-        }
-      }, 5000);
-    }
-  };
+if (window.location.protocol !== 'https:') {
+  log('Error: This application requires a secure HTTPS connection.', 'error');
+} else {
+  try {
+    ws = new WebSocket(`wss://${window.location.host}`);
 
-  ws.onerror = (error) => {
-    log('WebSocket error occurred - check browser console for details', 'error');
-    console.error('WebSocket error:', error);
-  };
+    ws.onopen = () => {
+      log('Secure WebSocket connection established', 'success');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        log(data.message, data.type);
+      } catch (error) {
+        log(`Error parsing WebSocket message: ${error.message}`, 'error');
+      }
+    };
+
+    ws.onerror = (error) => {
+      log('WebSocket error occurred - check browser console for details', 'error');
+      console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = (event) => {
+      log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason || 'none'})`, 'error');
+      if (window.location.protocol === 'https:') {
+        setTimeout(() => {
+          log('Attempting to reconnect...', 'info');
+          try {
+            const newWs = new WebSocket(`wss://${window.location.host}`);
+            newWs.onopen = ws.onopen;
+            newWs.onmessage = ws.onmessage;
+            newWs.onerror = ws.onerror;
+            newWs.onclose = ws.onclose;
+            ws = newWs;
+          } catch (error) {
+            log('Reconnection failed', 'error');
+          }
+        }, 5000);
+      }
+    };
+
+  } catch (error) {
+    log('Failed to establish secure WebSocket connection', 'error');
+    console.error('WebSocket init error:', error);
+  }
 }
 
 document.getElementById('vpnForm').addEventListener('submit', async function(e) {
   e.preventDefault();
-
-  // Clear the console before starting new generation
   consoleOutput.innerHTML = '';
-  
+
   const formData = new FormData(this);
   const data = Object.fromEntries(formData.entries());
+
+  if (!isValidCIDR(data.azureSubnet)) {
+    log('Invalid Azure Subnet format (use CIDR)', 'error');
+    return;
+  }
+
+  if (!isValidCIDR(data.customerNetwork)) {
+    log('Invalid Customer Network format (use CIDR)', 'error');
+    return;
+  }
 
   try {
     log('Starting OpenVPN configuration generation...', 'info');
     log(`Server selected: ${data.server}`, 'info');
     log(`Customer Name: ${data.customerName}`, 'info');
-    log('Validating network configurations...', 'info');
     log(`Azure Subnet: ${data.azureSubnet}`, 'info');
     log(`Customer Network: ${data.customerNetwork}`, 'info');
 
     const response = await fetch('/connect', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
 
@@ -287,20 +300,16 @@ document.getElementById('vpnForm').addEventListener('submit', async function(e) 
       throw new Error(errorData.error || 'Failed to generate configuration');
     }
 
-    log('Successfully connected to OpenVPN server', 'info');
-    log('Generating certificates...', 'info');
-    log('Creating client configuration...', 'info');
-    
-    // Check if the response is a blob (file download)
     const blob = await response.blob();
+    const sanitizedFilename = data.customerName.replace(/[^\w.-]/g, '_');
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = `${data.customerName}.ovpn`;
-    
+    a.download = `${sanitizedFilename}.ovpn`;
+
     log('Configuration generated successfully!', 'success');
     log('Downloading OpenVPN configuration file...', 'success');
-    
+
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -308,7 +317,6 @@ document.getElementById('vpnForm').addEventListener('submit', async function(e) 
 
   } catch (error) {
     log(`Error: ${error.message}`, 'error');
-    console.error('Error:', error);
   }
 });
 </script>
