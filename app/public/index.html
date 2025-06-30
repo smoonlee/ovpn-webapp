@@ -190,9 +190,23 @@
 </div>
 
 <script>
-// Initialize WebSocket connection
-const ws = new WebSocket(`ws://${window.location.host}`);
+// Initialize WebSocket connection (HTTPS only)
 const consoleOutput = document.getElementById('console');
+consoleOutput.innerHTML = '';
+
+let ws;
+
+if (window.location.protocol !== 'https:') {
+  log('Error: This application requires a secure HTTPS connection.', 'error');
+  log('Please access this page using HTTPS.', 'error');
+} else {
+  try {
+    ws = new WebSocket(`wss://${window.location.host}`);
+  } catch (error) {
+    log('Failed to establish secure WebSocket connection', 'error');
+    console.error('WebSocket initialization error:', error);
+  }
+}
 
 function log(message, type = 'info') {
   const timestamp = new Date().toISOString();
@@ -202,24 +216,46 @@ function log(message, type = 'info') {
   consoleOutput.scrollTop = consoleOutput.scrollHeight;
 }
 
-// WebSocket event handlers
-ws.onopen = () => {
-  log('Connected to server', 'success');
-};
+// WebSocket event handlers (only set up if HTTPS is used)
+if (ws) {
+  ws.onopen = () => {
+    log('Secure WebSocket connection established', 'success');
+  };
 
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  log(data.message, data.type);
-};
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      log(data.message, data.type);
+    } catch (error) {
+      log(`Error parsing WebSocket message: ${error.message}`, 'error');
+      console.error('WebSocket message parse error:', error);
+    }
+  };
 
-ws.onclose = () => {
-  log('Disconnected from server', 'error');
-};
+  ws.onclose = (event) => {
+    log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason || 'none'})`, 'error');
+    // Only attempt to reconnect if we're still on HTTPS
+    if (window.location.protocol === 'https:') {
+      setTimeout(() => {
+        log('Attempting to reconnect...', 'info');
+        try {
+          const newWs = new WebSocket(`wss://${window.location.host}`);
+          // Transfer all event handlers to the new WebSocket
+          Object.assign(newWs, ws);
+          ws = newWs;
+        } catch (error) {
+          log('Reconnection failed', 'error');
+          console.error('WebSocket reconnection error:', error);
+        }
+      }, 5000);
+    }
+  };
 
-ws.onerror = (error) => {
-  log('WebSocket error occurred', 'error');
-  console.error('WebSocket error:', error);
-};
+  ws.onerror = (error) => {
+    log('WebSocket error occurred - check browser console for details', 'error');
+    console.error('WebSocket error:', error);
+  };
+}
 
 document.getElementById('vpnForm').addEventListener('submit', async function(e) {
   e.preventDefault();

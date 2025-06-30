@@ -293,17 +293,65 @@ app.post("/connect", async (req, res) => {
 const server = http.createServer(app);
 
 // Create WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ 
+  server,
+  clientTracking: true,
+  // Increase timeout values
+  handshakeTimeout: 10000,
+  // Verify client connection is secure
+  verifyClient: ({ req, secure }) => {
+    // Check if the connection is secure (either direct HTTPS or behind a secure proxy)
+    const isSecure = secure || req.headers['x-forwarded-proto'] === 'https';
+    if (!isSecure) {
+      console.warn('Rejected insecure WebSocket connection attempt');
+      return false;
+    }
+    return true;
+  }
+});
 
 // WebSocket connections store
 const connections = new Set();
 
+// WebSocket server error handling
+wss.on("error", (error) => {
+  console.error("WebSocket Server Error:", error);
+});
+
 // WebSocket connection handling
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
+  console.log(`New WebSocket connection from ${req.socket.remoteAddress}`);
   connections.add(ws);
 
-  ws.on("close", () => {
+  // Send initial message to confirm connection
+  ws.send(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    message: "WebSocket connection established",
+    type: "success"
+  }));
+
+  // Handle individual connection errors
+  ws.on("error", (error) => {
+    console.error("WebSocket Client Error:", error);
+  });
+
+  ws.on("close", (code, reason) => {
+    console.log(`WebSocket connection closed: ${code} - ${reason || 'No reason provided'}`);
     connections.delete(ws);
+  });
+
+  // Keep connection alive with ping/pong
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.ping();
+    } else {
+      clearInterval(pingInterval);
+    }
+  }, 30000);
+
+  ws.on("pong", () => {
+    // Connection is still alive
+    ws.isAlive = true;
   });
 });
 
