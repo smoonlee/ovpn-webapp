@@ -4,6 +4,8 @@ const path = require("path");
 const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 const { Client } = require("ssh2");
+const http = require("http");
+const WebSocket = require("ws");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -280,7 +282,40 @@ app.post("/connect", async (req, res) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server });
+
+// WebSocket connections store
+const connections = new Set();
+
+// WebSocket connection handling
+wss.on("connection", (ws) => {
+  connections.add(ws);
+
+  ws.on("close", () => {
+    connections.delete(ws);
+  });
+});
+
+// Broadcast to all connected clients
+function broadcast(message, type = "info") {
+  const messageData = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    message,
+    type,
+  });
+
+  connections.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(messageData);
+    }
+  });
+}
+
+// Start the server
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

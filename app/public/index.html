@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OpenVPN Connection</title>
+  <title>OpenVPN Configurator</title>
   <style>
     /* Ensure consistent box-sizing across all elements */
     *, *::before, *::after {
@@ -21,6 +21,14 @@
       padding: 20px;
     }
 
+    .container {
+      display: flex;
+      gap: 20px;
+      max-width: 1000px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
     .form-container {
       background-color: #ffffff;
       padding: 30px;
@@ -29,6 +37,44 @@
       width: 100%;
       max-width: 400px;
       animation: fadeIn 0.6s ease-out;
+    }
+
+    .console-container {
+      background-color: #1e1e1e;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 600px;
+      height: 600px;
+      overflow-y: auto;
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    .console-output {
+      font-family: "Consolas", "Monaco", monospace;
+      color: #00ff00;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .console-timestamp {
+      color: #888;
+      margin-right: 8px;
+    }
+
+    .console-error {
+      color: #ff4444;
+    }
+
+    .console-success {
+      color: #00ff00;
+    }
+
+    .console-info {
+      color: #00bfff;
     }
 
     @keyframes fadeIn {
@@ -90,8 +136,20 @@
       background-color: #0056b3;
     }
 
+    @media (max-width: 1024px) {
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .console-container {
+        max-width: 600px;
+        height: 400px;
+      }
+    }
+
     @media (max-width: 480px) {
-      .form-container {
+      .form-container, .console-container {
         padding: 20px;
       }
 
@@ -102,10 +160,11 @@
   </style>
 </head>
 <body>
-  <form action="/connect" method="POST" class="form-container">
-    <h2>OpenVPN Connection</h2>
+  <div class="container">
+    <form id="vpnForm" class="form-container">
+      <h2>OpenVPN Configurator</h2>
 
-    <label for="server">Select Server:</label>
+      <label for="server">Select Server:</label>
     <select id="server" name="server" required>
       <option value="">-- Choose a server --</option>
       <option value="app1">App1 (20.4.208.94)</option>
@@ -124,5 +183,95 @@
 
     <button type="submit">Generate</button>
   </form>
+
+  <div class="console-container">
+    <div id="console" class="console-output"></div>
+  </div>
+</div>
+
+<script>
+// Initialize WebSocket connection
+const ws = new WebSocket(`ws://${window.location.host}`);
+const consoleOutput = document.getElementById('console');
+
+function log(message, type = 'info') {
+  const timestamp = new Date().toISOString();
+  const logEntry = document.createElement('div');
+  logEntry.innerHTML = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-${type}">${message}</span>`;
+  consoleOutput.appendChild(logEntry);
+  consoleOutput.scrollTop = consoleOutput.scrollHeight;
+}
+
+// WebSocket event handlers
+ws.onopen = () => {
+  log('Connected to server', 'success');
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  log(data.message, data.type);
+};
+
+ws.onclose = () => {
+  log('Disconnected from server', 'error');
+};
+
+ws.onerror = (error) => {
+  log('WebSocket error occurred', 'error');
+  console.error('WebSocket error:', error);
+};
+
+document.getElementById('vpnForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const formData = new FormData(this);
+  const data = Object.fromEntries(formData.entries());
+
+  try {
+    log('Starting OpenVPN configuration generation...', 'info');
+    log(`Server selected: ${data.server}`, 'info');
+    log(`Customer Name: ${data.customerName}`, 'info');
+    log('Validating network configurations...', 'info');
+    log(`Azure Subnet: ${data.azureSubnet}`, 'info');
+    log(`Customer Network: ${data.customerNetwork}`, 'info');
+
+    const response = await fetch('/connect', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate configuration');
+    }
+
+    log('Successfully connected to OpenVPN server', 'info');
+    log('Generating certificates...', 'info');
+    log('Creating client configuration...', 'info');
+    
+    // Check if the response is a blob (file download)
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `${data.customerName}.ovpn`;
+    
+    log('Configuration generated successfully!', 'success');
+    log('Downloading OpenVPN configuration file...', 'success');
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+
+  } catch (error) {
+    log(`Error: ${error.message}`, 'error');
+    console.error('Error:', error);
+  }
+});
+</script>
 </body>
 </html>
