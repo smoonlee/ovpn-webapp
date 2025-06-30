@@ -2,7 +2,18 @@
 
 ## Overview
 
-The OpenVPN Configurator includes a real-time console interface that provides immediate feedback during the certificate generation and configuration process. This is implemented using secure WebSocket connections (WSS) and a modern, terminal-style interface.
+The OpenVPN Configurator includes a real-time console interface that provides immediate feedback during the certificate generation and configuration process. This is implemented using secure WebSocket connections (WSS) and a modern, terminal-style interface. The console provides a clear, color-coded view of the configuration process and automatically clears between operations for better readability.
+
+## Features
+
+- Real-time operation feedback
+- Auto-clearing between operations
+- Color-coded message types
+- Secure WSS-only connections
+- Automatic reconnection
+- Responsive design (800px width, adapts to mobile)
+- Timestamp for each message
+- Auto-scrolling
 
 ## Technical Implementation
 

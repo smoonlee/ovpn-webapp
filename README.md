@@ -16,11 +16,14 @@ A Node.js web application for managing OpenVPN client configurations and certifi
 ### Real-Time Console
 
 - Live operation progress via WebSocket connection
-- Secure WSS-only communication protocol
+- Auto-clearing console between operations
+- Large 800px width for better readability
 - Color-coded message types (success/error/info)
+- Timestamped entries with auto-scrolling
+- Secure WSS-only communication protocol
 - Automatic reconnection handling
 - Connection status indicators
-- Responsive console design
+- Responsive design for mobile devices
 
 ### Security
 
