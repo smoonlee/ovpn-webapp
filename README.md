@@ -4,13 +4,31 @@ A Node.js web application for managing OpenVPN client configurations and certifi
 
 ## Features
 
+### Core Features
+
 - Automated OpenVPN client certificate generation
 - Custom client configuration (CCD) profile creation
 - Secure SSH-based remote configuration
 - Azure Key Vault integration for secure key storage
 - Automatic route configuration for client networks
 - Support for multiple OpenVPN servers
-- Detailed logging system
+
+### Real-Time Console
+
+- Live operation progress via WebSocket connection
+- Secure WSS-only communication protocol
+- Color-coded message types (success/error/info)
+- Automatic reconnection handling
+- Connection status indicators
+- Responsive console design
+
+### Security
+
+- HTTPS-only access enforcement
+- WSS-only WebSocket connections
+- Azure Key Vault integration
+- Secure SSH key management
+- Detailed logging and monitoring
 
 ## Prerequisites
 

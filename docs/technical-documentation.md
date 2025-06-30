@@ -109,6 +109,68 @@ The application manages OpenVPN certificates through the following process:
    - Adds routing information
    - Sets security parameters
 
+### 4. WebSocket Implementation
+
+#### Server-Side WebSocket
+
+```javascript
+const wss = new WebSocket.Server({
+  server,
+  clientTracking: true,
+  handshakeTimeout: 10000,
+  verifyClient: ({ req, secure }) => {
+    const isSecure = secure || req.headers['x-forwarded-proto'] === 'https';
+    return isSecure;
+  }
+});
+```
+
+The WebSocket server implementation provides:
+
+1. **Security Features**
+   - WSS-only connections enforced
+   - Connection verification
+   - Proxy-awareness
+   - Handshake timeout protection
+
+2. **Client Management**
+   - Connection tracking
+   - Health monitoring
+   - Automatic cleanup
+   - Connection state management
+
+3. **Communication Protocol**
+   - JSON message format
+   - Timestamped messages
+   - Message type categorization
+   - Progress broadcasting
+
+4. **Error Handling**
+   - Connection failure recovery
+   - Error message propagation
+   - Clean disconnection handling
+   - Resource cleanup
+
+The WebSocket implementation follows these security principles:
+
+1. **Connection Security**
+   - WSS protocol enforcement
+   - HTTPS requirement
+   - Proxy-aware security checks
+   - Connection validation
+
+2. **Message Security**
+   - No sensitive data transmission
+   - Progress information only
+   - Validated message format
+   - Sanitized output
+
+3. **Resource Management**
+   - Connection timeouts
+   - Automatic resource cleanup
+   - Memory leak prevention
+   - Connection monitoring
+
 ## Deployment Guide
 
 ### Prerequisites Configuration
