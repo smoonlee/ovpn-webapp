@@ -11,6 +11,8 @@
     "@azure/identity": "4.10.1",
     "@azure/keyvault-secrets": "4.10.0",
     "ssh2": "1.16.0",
-    "ws": "8.18.3"
+    "ws": "8.18.3",
+    "compression": "1.8.0"
+
   }
 }

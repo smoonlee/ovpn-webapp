@@ -9,8 +9,13 @@
       box-sizing: border-box;
     }
 
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    body {
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       background: linear-gradient(135deg, #e3f2fd, #f4f4f4);
       height: 100vh;
@@ -118,6 +123,10 @@
       outline: none;
     }
 
+    .input-error {
+      border-color: #ff4444 !important;
+    }
+
     button {
       width: 100%;
       padding: 14px;
@@ -185,7 +194,7 @@
       <label for="customerNetwork">Customer Network:</label>
       <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required>
 
-      <button type="submit">Generate</button>
+      <button type="submit" id="submitBtn">Generate</button>
       <button type="button" id="clearConsole">Clear Console</button>
     </form>
 
@@ -196,7 +205,12 @@
 
 <script>
 const consoleOutput = document.getElementById('console');
+const form = document.getElementById('vpnForm');
+const submitBtn = document.getElementById('submitBtn');
+const customerNameInput = document.getElementById('customerName');
+
 consoleOutput.innerHTML = '';
+customerNameInput.value = localStorage.getItem('customerName') || '';
 
 document.getElementById('clearConsole').addEventListener('click', () => {
   consoleOutput.innerHTML = '';
@@ -204,90 +218,84 @@ document.getElementById('clearConsole').addEventListener('click', () => {
 
 function log(message, type = 'info') {
   const timestamp = new Date().toISOString();
-  const logEntry = document.createElement('div');
-  logEntry.innerHTML = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-${type}">${message}</span>`;
-  consoleOutput.appendChild(logEntry);
+  const entry = document.createElement('div');
+  entry.innerHTML = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-${type}">${escapeHtml(message)}</span>`;
+  consoleOutput.appendChild(entry);
   consoleOutput.scrollTop = consoleOutput.scrollHeight;
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  }[m]));
 }
 
 function isValidCIDR(cidr) {
   return /^([0-9]{1,3}\.){3}[0-9]{1,3}\/([0-9]|[1-2][0-9]|3[0-2])$/.test(cidr);
 }
 
-let ws;
+function setFieldError(input, isError) {
+  input.classList.toggle('input-error', isError);
+}
 
-if (window.location.protocol !== 'https:') {
-  log('Error: This application requires a secure HTTPS connection.', 'error');
-} else {
+function connectWebSocket() {
   try {
-    ws = new WebSocket(`wss://${window.location.host}`);
-
-    ws.onopen = () => {
-      log('Secure WebSocket connection established', 'success');
-    };
-
-    ws.onmessage = (event) => {
+    const ws = new WebSocket(`wss://${window.location.host}`);
+    ws.onopen = () => log('Secure WebSocket connection established', 'success');
+    ws.onmessage = event => {
       try {
         const data = JSON.parse(event.data);
         log(data.message, data.type);
-      } catch (error) {
-        log(`Error parsing WebSocket message: ${error.message}`, 'error');
+      } catch (e) {
+        log('Invalid WebSocket message received', 'error');
       }
     };
-
-    ws.onerror = (error) => {
-      log('WebSocket error occurred - check browser console for details', 'error');
-      console.error('WebSocket error:', error);
+    ws.onerror = err => {
+      log('WebSocket error - see console for details', 'error');
+      console.error(err);
     };
-
-    ws.onclose = (event) => {
-      log(`WebSocket disconnected (code: ${event.code}, reason: ${event.reason || 'none'})`, 'error');
-      if (window.location.protocol === 'https:') {
-        setTimeout(() => {
-          log('Attempting to reconnect...', 'info');
-          try {
-            const newWs = new WebSocket(`wss://${window.location.host}`);
-            newWs.onopen = ws.onopen;
-            newWs.onmessage = ws.onmessage;
-            newWs.onerror = ws.onerror;
-            newWs.onclose = ws.onclose;
-            ws = newWs;
-          } catch (error) {
-            log('Reconnection failed', 'error');
-          }
-        }, 5000);
-      }
+    ws.onclose = e => {
+      log(`WebSocket closed (code ${e.code})`, 'info');
+      setTimeout(connectWebSocket, 5000);
     };
-
-  } catch (error) {
-    log('Failed to establish secure WebSocket connection', 'error');
-    console.error('WebSocket init error:', error);
+  } catch (e) {
+    log('WebSocket connection failed', 'error');
   }
 }
 
-document.getElementById('vpnForm').addEventListener('submit', async function(e) {
+if (window.location.protocol === 'https:') {
+  connectWebSocket();
+} else {
+  log('Error: HTTPS is required to use this app.', 'error');
+}
+
+form.addEventListener('submit', async e => {
   e.preventDefault();
   consoleOutput.innerHTML = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Generating...';
 
-  const formData = new FormData(this);
+  const formData = new FormData(form);
   const data = Object.fromEntries(formData.entries());
 
-  if (!isValidCIDR(data.azureSubnet)) {
-    log('Invalid Azure Subnet format (use CIDR)', 'error');
+  setFieldError(azureSubnet, !isValidCIDR(data.azureSubnet));
+  setFieldError(customerNetwork, !isValidCIDR(data.customerNetwork));
+
+  if (!isValidCIDR(data.azureSubnet) || !isValidCIDR(data.customerNetwork)) {
+    log('Invalid CIDR format. Please check inputs.', 'error');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Generate';
     return;
   }
 
-  if (!isValidCIDR(data.customerNetwork)) {
-    log('Invalid Customer Network format (use CIDR)', 'error');
-    return;
-  }
+  log('Generating OpenVPN configuration...', 'info');
+  log(`Customer: ${data.customerName}`, 'info');
+  log(`Server: ${data.server}`, 'info');
+  log(`Azure Subnet: ${data.azureSubnet}`, 'info');
+  log(`Customer Network: ${data.customerNetwork}`, 'info');
 
   try {
-    log('Starting OpenVPN configuration generation...', 'info');
-    log(`Server selected: ${data.server}`, 'info');
-    log(`Customer Name: ${data.customerName}`, 'info');
-    log(`Azure Subnet: ${data.azureSubnet}`, 'info');
-    log(`Customer Network: ${data.customerNetwork}`, 'info');
+    localStorage.setItem('customerName', data.customerName);
 
     const response = await fetch('/connect', {
       method: 'POST',
@@ -297,27 +305,27 @@ document.getElementById('vpnForm').addEventListener('submit', async function(e) 
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate configuration');
+      throw new Error(errorData.error || 'Server error');
     }
 
     const blob = await response.blob();
     const sanitizedFilename = data.customerName.replace(/[^\w.-]/g, '_');
-    const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = downloadUrl;
+    a.href = URL.createObjectURL(blob);
     a.download = `${sanitizedFilename}.ovpn`;
-
-    log('Configuration generated successfully!', 'success');
-    log('Downloading OpenVPN configuration file...', 'success');
-
+    a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    window.URL.revokeObjectURL(downloadUrl);
+    URL.revokeObjectURL(a.href);
 
-  } catch (error) {
-    log(`Error: ${error.message}`, 'error');
+    log('Configuration downloaded successfully!', 'success');
+  } catch (err) {
+    log(`Error: ${err.message}`, 'error');
   }
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Generate';
 });
 </script>
 </body>
