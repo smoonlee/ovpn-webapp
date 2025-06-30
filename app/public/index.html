@@ -54,7 +54,7 @@
     .console-output {
       font-family: "Consolas", "Monaco", monospace;
       color: #00ff00;
-      font-size: 10px;
+      font-size: 12px;
       line-height: 1.5;
       white-space: pre-wrap;
       word-wrap: break-word;
@@ -260,6 +260,9 @@ if (ws) {
 document.getElementById('vpnForm').addEventListener('submit', async function(e) {
   e.preventDefault();
 
+  // Clear the console before starting new generation
+  consoleOutput.innerHTML = '';
+  
   const formData = new FormData(this);
   const data = Object.fromEntries(formData.entries());
 
