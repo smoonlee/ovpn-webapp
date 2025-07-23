@@ -1,5 +1,4 @@
 // Hardened and performance-optimized OpenVPN setup server
-
 const express = require("express");
 const fs = require("fs").promises;
 const path = require("path");
@@ -16,6 +15,12 @@ const keyVaultUrl = `https://${process.env.KEY_VAULT_NAME}.vault.azure.net`;
 const credential = new DefaultAzureCredential();
 const secretClient = new SecretClient(keyVaultUrl, credential);
 
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config({
+    path: require("path").join(__dirname, ".env.local"),
+  });
+}
+
 // Middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -26,11 +31,42 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(compression());
 
+
+const serverList = [
+  {
+    key: "app1",
+    name: process.env.OVPN_SERVER1_NAME || "App1",
+    ip: process.env.OVPN_SERVER1_IP_PUBLIC || "undefined",
+  },
+  {
+    key: "app2",
+    name: process.env.OVPN_SERVER2_NAME || "App2",
+    ip: process.env.OVPN_SERVER2_IP_PUBLIC || "undefined",
+  },
+  {
+    key: "app3",
+    name: process.env.OVPN_SERVER3_NAME || "App3",
+    ip: process.env.OVPN_SERVER3_IP_PUBLIC || "undefined",
+  },
+];
+
 const serverIPs = {
-  app1: process.env.OVPN_SERVER1_IP,
-  app2: process.env.OVPN_SERVER2_IP,
-  app3: process.env.OVPN_SERVER3_IP,
+  app1: process.env.OVPN_SERVER1_IP_PUBLIC,
+  app2: process.env.OVPN_SERVER2_IP_PUBLIC,
+  app3: process.env.OVPN_SERVER3_IP_PUBLIC,
 };
+
+app.get("/api/servers", (req, res) => {
+  console.log("[DEBUG] /api/servers env:", {
+    OVPN_SERVER1_NAME: process.env.OVPN_SERVER1_NAME,
+    OVPN_SERVER1_IP_PUBLIC: process.env.OVPN_SERVER1_IP_PUBLIC,
+    OVPN_SERVER2_NAME: process.env.OVPN_SERVER2_NAME,
+    OVPN_SERVER2_IP_PUBLIC: process.env.OVPN_SERVER2_IP_PUBLIC,
+    OVPN_SERVER3_NAME: process.env.OVPN_SERVER3_NAME,
+    OVPN_SERVER3_IP_PUBLIC: process.env.OVPN_SERVER3_IP_PUBLIC,
+  });
+  res.json(serverList);
+});
 
 function sanitizeInput(input, label = "input") {
   if (!/^[a-zA-Z0-9_-]+$/.test(input)) {

@@ -14,9 +14,6 @@
       <label for="server">Select Server:</label>
       <select id="server" name="server" required>
         <option value="">-- Choose a server --</option>
-        <option value="app1">App1 (20.4.208.94)</option>
-        <option value="app2">App2 (2.3.4.5)</option>
-        <option value="app3">App3 (3.4.5.6)</option>
       </select>
 
       <label for="customerName">Customer Name:</label>
@@ -50,10 +47,31 @@
   </div>
 
 <script>
+
 const consoleOutput = document.getElementById('console');
 const form = document.getElementById('vpnForm');
 const submitBtn = document.getElementById('submitBtn');
 const customerNameInput = document.getElementById('customerName');
+const serverSelect = document.getElementById('server');
+
+async function populateServerDropdown() {
+  try {
+    const res = await fetch('/api/servers');
+    if (!res.ok) throw new Error('Failed to fetch server list');
+    const servers = await res.json();
+    serverSelect.innerHTML = '<option value="">-- Choose a server --</option>';
+    servers.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.key;
+      opt.textContent = `${s.name}: ${s.ip}`;
+      serverSelect.appendChild(opt);
+    });
+  } catch (err) {
+    log('Could not load server list', 'error');
+  }
+}
+
+populateServerDropdown();
 
 consoleOutput.innerHTML = '';
 customerNameInput.value = localStorage.getItem('customerName') || '';
@@ -136,7 +154,8 @@ form.addEventListener('submit', async e => {
 
   log('Generating OpenVPN configuration...', 'info');
   log(`Customer: ${data.customerName}`, 'info');
-  log(`Server: ${data.server}`, 'info');
+  log(`Server: ${serverSelect.options[serverSelect.selectedIndex].textContent.split(':')[0]}`, 'info');
+  log(`OpenVPN IP: ${serverSelect.options[serverSelect.selectedIndex].textContent.split(':')[1]?.trim() || ''}`, 'info');
   log(`Azure Subnet: ${data.azureSubnet}`, 'info');
   log(`Customer Network: ${data.customerNetwork}`, 'info');
 
