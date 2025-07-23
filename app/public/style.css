@@ -118,6 +118,23 @@ select:focus {
 
 .input-error {
   border-color: #ff4444 !important;
+  position: relative;
+}
+
+.input-error[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 0;
+  top: 100%;
+  background: #ff4444;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  z-index: 10;
+  margin-top: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 .input-success {
