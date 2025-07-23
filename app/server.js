@@ -202,10 +202,14 @@ app.post("/connect", async (req, res) => {
       `bash -c '
       cd /etc/openvpn/easy-rsa &&
       ./easyrsa --batch revoke ${customerName} || true &&
+      echo "Certificate for ${customerName} revoked" &&
       ./easyrsa --batch gen-crl &&
       rm -f pki/private/${customerName}.key pki/issued/${customerName}.crt pki/reqs/${customerName}.req &&
+      echo "Removed keys and certificates for ${customerName}" &&
       rm -f /etc/openvpn/ccd/${customerName} &&
+      echo "Removed  ${customerName} CCD profile for ${customerName}" &&
       sudo ip route del ${cust.network}/${bits} dev tun0 || true
+      echo "Removed ${customerName} route for ${cust.network}/${bits} on tun0"
     '`
     );
 
