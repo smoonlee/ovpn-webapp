@@ -191,7 +191,6 @@ app.post("/connect", async (req, res) => {
     validateCIDR(azureSubnet);
 
     const sshKey = await getSSHKey(keyName);
-    // Pass server key, not IP, to connectSSH for consistent logging
     const conn = await connectSSH(server, sshKey);
     const [_, bits] = customerNetwork.split("/");
     const cust = cidrToNetworkAndMask(customerNetwork);
@@ -201,9 +200,9 @@ app.post("/connect", async (req, res) => {
     await execCommand(
       conn,
       `bash -c '
-      mkdir -p /var/log/ovpnsetup &&
       cd /etc/openvpn/easy-rsa &&
       ./easyrsa --batch revoke ${customerName} || true &&
+      ./easyrsa --batch gen-crl &&
       rm -f pki/private/${customerName}.key pki/issued/${customerName}.crt pki/reqs/${customerName}.req &&
       rm -f /etc/openvpn/ccd/${customerName} &&
       sudo ip route del ${cust.network}/${bits} dev tun0 || true
