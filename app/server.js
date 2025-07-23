@@ -1,4 +1,3 @@
-
 const path = require("path");
 const fs = require("fs").promises;
 
@@ -113,13 +112,13 @@ async function getSSHKey(name) {
 }
 
 async function connectSSH(serverKey, key) {
-  // Ensure we use the private IP from serverIPs mapping
-  // For example, if serverKey is "app1", this will use process.env.OVPN_SERVER1_IP_PRIVATE
   const serverIP = serverIPs[serverKey];
   const username = process.env.SSH_USERNAME || "undefined";
-  if (!serverIP) throw new Error("Unknown server key or missing private IP");
-  console.log(`[connectSSH] username: ${username}, serverIP: ${serverIP}`);
+  console.log(`[connectSSH] serverKey: ${serverKey}`);
+  console.log(`[connectSSH] serverIP: ${serverIP}`);
+  console.log(`[connectSSH] username: ${username}`);
   console.log(`[connectSSH] SSH key collected from KeyVault: ${!!key && key.startsWith("-----BEGIN")}`);
+  if (!serverIP) throw new Error(`Unknown server key or missing private IP (serverKey: ${serverKey}, serverIP: ${serverIP})`);
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn
@@ -184,13 +183,16 @@ app.post("/connect", async (req, res) => {
   const keyName = process.env.SSH_SECRET_NAME;
 
   try {
-    if (!serverIPs[server]) throw new Error("Unknown server");
+    console.log(`[POST /connect] Incoming server key: ${server}`);
+    console.log(`[POST /connect] serverIPs mapping:`, serverIPs);
+    if (!serverIPs[server]) throw new Error(`Unknown server (server: ${server}, serverIPs: ${JSON.stringify(serverIPs)})`);
     sanitizeInput(customerName, "customer name");
     validateCIDR(customerNetwork);
     validateCIDR(azureSubnet);
 
     const sshKey = await getSSHKey(keyName);
-    const conn = await connectSSH(serverIPs[server], sshKey);
+    // Pass server key, not IP, to connectSSH for consistent logging
+    const conn = await connectSSH(server, sshKey);
     const [_, bits] = customerNetwork.split("/");
     const cust = cidrToNetworkAndMask(customerNetwork);
     const az = cidrToNetworkAndMask(azureSubnet);
@@ -223,7 +225,7 @@ app.post("/connect", async (req, res) => {
       conn,
       `cat <<EOF > /etc/openvpn/ccd/${customerName}
 ifconfig-push ${cust.network} ${cust.mask}
-push \"route ${az.network} ${az.mask}\"
+push 'route ${az.network} ${az.mask}'
 EOF`
     );
 
