@@ -19,21 +19,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js version
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4.4.0
         with:
           node-version: '22.x'
 
       - name: npm install, build, and test
+        working-directory: ./app
         run: |
           npm install
           npm run build --if-present
           npm run test --if-present
 
       - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+        run: cd app && zip -r ../release.zip ./*
 
       - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: node-app
           path: release.zip
@@ -47,7 +48,7 @@ jobs:
 
     steps:
       - name: Download artifact from build job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.3.0
         with:
           name: node-app
 
@@ -55,7 +56,7 @@ jobs:
         run: unzip release.zip
       
       - name: Login to Azure
-        uses: azure/login@v2
+        uses: azure/login@v2.3.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_0A15CB84B5734EBE84C2C98DC57A83C1 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_89BE1A747DD64106A7BB2FAFB00DD601 }}
