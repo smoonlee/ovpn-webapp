@@ -1,25 +1,27 @@
-// Hardened and performance-optimized OpenVPN setup server
-const express = require("express");
-const fs = require("fs").promises;
+
 const path = require("path");
-const { DefaultAzureCredential } = require("@azure/identity");
-const { SecretClient } = require("@azure/keyvault-secrets");
-const { Client } = require("ssh2");
+const fs = require("fs").promises;
+
+const express = require("express");
+const compression = require("compression");
 const http = require("http");
 const WebSocket = require("ws");
-const compression = require("compression");
+
+const { Client } = require("ssh2");
+const { DefaultAzureCredential } = require("@azure/identity");
+const { SecretClient } = require("@azure/keyvault-secrets");
+
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config({
+    path: path.join(__dirname, ".env.local"),
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 const keyVaultUrl = `https://${process.env.KEY_VAULT_NAME}.vault.azure.net`;
 const credential = new DefaultAzureCredential();
 const secretClient = new SecretClient(keyVaultUrl, credential);
-
-if (process.env.NODE_ENV !== "production") {
-  require("dotenv").config({
-    path: require("path").join(__dirname, ".env.local"),
-  });
-}
 
 // Middleware
 app.use((req, res, next) => {
@@ -36,28 +38,31 @@ const serverList = [
   {
     key: "app1",
     name: process.env.OVPN_SERVER1_NAME || "undefined",
-    ip: process.env.OVPN_SERVER1_IP_PUBLIC || "undefined",
+    ipPublic: process.env.OVPN_SERVER1_IP_PUBLIC || "undefined",
+    ipPrivate: process.env.OVPN_SERVER1_IP_PRIVATE || "undefined",
   },
   {
     key: "app2",
     name: process.env.OVPN_SERVER2_NAME || "undefined2",
-    ip: process.env.OVPN_SERVER2_IP_PUBLIC || "undefined",
+    ipPublic: process.env.OVPN_SERVER2_IP_PUBLIC || "undefined",
+    ipPrivate: process.env.OVPN_SERVER2_IP_PRIVATE || "undefined",
   },
   {
     key: "app3",
     name: process.env.OVPN_SERVER3_NAME || "undefined",
-    ip: process.env.OVPN_SERVER3_IP_PUBLIC || "undefined",
+    ipPublic: process.env.OVPN_SERVER3_IP_PUBLIC || "undefined",
+    ipPrivate: process.env.OVPN_SERVER3_IP_PRIVATE || "undefined",
   },
 ];
 
 const serverIPs = {
-  app1: process.env.OVPN_SERVER1_IP_PUBLIC,
-  app2: process.env.OVPN_SERVER2_IP_PUBLIC,
-  app3: process.env.OVPN_SERVER3_IP_PUBLIC,
+  app1: process.env.OVPN_SERVER1_IP_PRIVATE,
+  app2: process.env.OVPN_SERVER2_IP_PRIVATE,
+  app3: process.env.OVPN_SERVER3_IP_PRIVATE,
 };
 
 app.get("/api/servers", (req, res) => {
-  console.log("[DEBUG] /api/servers env:", {
+  console.log("/api/servers env:", {
     OVPN_SERVER1_NAME: process.env.OVPN_SERVER1_NAME,
     OVPN_SERVER1_IP_PUBLIC: process.env.OVPN_SERVER1_IP_PUBLIC,
     OVPN_SERVER2_NAME: process.env.OVPN_SERVER2_NAME,
@@ -104,7 +109,10 @@ async function getSSHKey(name) {
   return secret.value;
 }
 
-function connectSSH(serverIP, key) {
+function connectSSH(serverKey, key) {
+  // Ensure we use the private IP from serverIPs mapping
+  const serverIP = serverIPs[serverKey];
+  if (!serverIP) throw new Error("Unknown server key or missing private IP");
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn

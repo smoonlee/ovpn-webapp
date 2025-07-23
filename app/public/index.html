@@ -63,7 +63,7 @@ async function populateServerDropdown() {
     servers.forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.key;
-      opt.textContent = `${s.name}: ${s.ip}`;
+      opt.textContent = `${s.name}: ${s.ipPublic}`;
       serverSelect.appendChild(opt);
     });
   } catch (err) {
