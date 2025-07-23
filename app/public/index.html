@@ -189,7 +189,7 @@ form.addEventListener('submit', async e => {
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
 
-    log('Configuration downloaded successfully!', 'success');
+    log('OpenVPN Profile, Successfully Generated!', 'success');
   } catch (err) {
     log(`Error: ${err.message}`, 'error');
   }

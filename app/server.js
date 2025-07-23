@@ -247,40 +247,33 @@ app.post("/connect", async (req, res) => {
     broadcast("Cleaning up previous configuration...");
     function broadcastEcho(msg) {
       broadcast(msg);
-      return `echo "${msg}"`;
+      return `echo \"${msg}\"`;
     }
 
     // Pre-check: If certificate exists, revoke and clean up
-    const certExistsCmd = `test -f /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt && echo "EXISTS" || echo "NOT_EXISTS"`;
+    const certExistsCmd = `test -f /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt && echo \"EXISTS\" || echo \"NOT_EXISTS\"`;
     const certExists = await execCommand(conn, certExistsCmd);
 
     if (certExists === "EXISTS") {
       // Check for CCD profile existence
-      const ccdExistsCmd = `test -f /etc/openvpn/ccd/${customerName} && echo "CCD_EXISTS" || echo "CCD_NOT_EXISTS"`;
+      const ccdExistsCmd = `test -f /etc/openvpn/ccd/${customerName} && echo \"CCD_EXISTS\" || echo \"CCD_NOT_EXISTS\"`;
       const ccdExists = await execCommand(conn, ccdExistsCmd);
 
-      await execCommand(
-        conn,
-        [
-          `cd /etc/openvpn/easy-rsa`,
-          `sudo ./easyrsa --batch revoke '${customerName}' `,
-          broadcastEcho(`Certificate for ${customerName} revoked`),
-
-          `sudo ./easyrsa --batch gen-crl`,
-          `sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`,
-          broadcastEcho(`Removed keys and certificates for ${customerName}`),
-
-          ccdExists === "CCD_EXISTS"
-        ? `sudo rm -f /etc/openvpn/ccd/'${customerName}' && ${broadcastEcho(
-            `Removed CCD profile for ${customerName}`
-          )}`
-        : broadcastEcho(`No CCD profile found for ${customerName}`),
-
-          `sudo ip route del '${cust.network}/${bits}'`,
-          broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`),
-          `sudo chown -R '${process.env.SSH_USERNAME}': /etc/openvpn/easy-rsa/pki`,
-        ].join(" && ")
-      );
+      // Run easy-rsa commands with working directory
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch revoke '${customerName}'`);
+      await execCommand(conn, broadcastEcho(`Certificate for ${customerName} revoked`));
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-crl`);
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`);
+      await execCommand(conn, broadcastEcho(`Removed keys and certificates for ${customerName}`));
+      if (ccdExists === "CCD_EXISTS") {
+        await execCommand(conn, `sudo rm -f /etc/openvpn/ccd/'${customerName}'`);
+        await execCommand(conn, broadcastEcho(`Removed CCD profile for ${customerName}`));
+      } else {
+        await execCommand(conn, broadcastEcho(`No CCD profile found for ${customerName}`));
+      }
+      await execCommand(conn, `sudo ip route del '${cust.network}/${bits}'`);
+      await execCommand(conn, broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`));
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo chown -R '${process.env.SSH_USERNAME}': pki`);
     } else {
       broadcast(`No certificate found for ${customerName}`);
     }
@@ -288,50 +281,50 @@ app.post("/connect", async (req, res) => {
     // Step 4: Generate new certificates
     broadcast("");
     broadcast("Generating certificates...");
-    await execCommand(
-      conn,
-      `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-req ${customerName} nopass`
-    );
-    await execCommand(
-      conn,
-      `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch sign-req client ${customerName}`
-    );
+    await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-req ${customerName} nopass`);
+    await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch sign-req client ${customerName}`);
 
-    // Step 5: Create CCD profile
+    // Step 5: Create CCD profile (refactored to avoid heredoc)
     broadcast("Creating CCD profile...");
-    await execCommand(
-      conn,
-      `sudo cat <<EOF > /etc/openvpn/ccd/${customerName}
-      ifconfig-push ${cust.network} ${cust.mask}
-      push \"route ${az.network} ${az.mask}\"
-      EOF`
-    );
+    await execCommand(conn, `echo 'ifconfig-push ${cust.network} ${cust.mask}' | sudo tee /etc/openvpn/ccd/${customerName}`);
+    broadcast(`Added ifconfig-push for: ${cust.network}/${bits}`);
+    await execCommand(conn, `echo 'push "route ${az.network} ${az.mask}"' | sudo tee -a /etc/openvpn/ccd/${customerName}`);
+    broadcast(`Added push route for Azure subnet: ${az.network}/${bits}`);
 
     // Step 6: Add route to tun0
     broadcast(`Adding route ${cust.network}/${bits} to tun0...`);
-    await execCommand(
-      conn,
-      `sudo ip route add ${cust.network}/${bits} dev tun0`
-    );
+    // Check if route already exists
+    const routeCheckCmd = `ip route | grep -w '${cust.network}/${bits}'`;
+    let routeExists = false;
+    try {
+      const routeCheckResult = await execCommand(conn, routeCheckCmd);
+      routeExists = !!routeCheckResult;
+    } catch (e) {
+      // If grep returns no result, execCommand may throw; treat as route not existing
+      routeExists = false;
+    }
+    if (routeExists) {
+      broadcast(`Error: Route ${cust.network}/${bits} already exists on tun0`, "error");
+    } else {
+      try {
+        await execCommand(conn, `sudo ip route add ${cust.network}/${bits} dev tun0`);
+      } catch (e) {
+        broadcast(`Warning: Could not add route ${cust.network}/${bits} to tun0: ${e.message}`, "warning");
+      }
+    }
 
     // Step 7: Collect certificates and keys
-    const caCert = await execCommand(
-      conn,
-      `sudo cat /etc/openvpn/easy-rsa/pki/ca.crt`
-    );
-    let clientCertRaw = await execCommand(
-      conn,
-      `sudo cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`
-    );
+    // Parallelize certificate/key retrieval for performance
+    const [caCert, clientCertRaw, clientKey] = await Promise.all([
+      execCommand(conn, `sudo cat /etc/openvpn/easy-rsa/pki/ca.crt`),
+      execCommand(conn, `sudo cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`),
+      execCommand(conn, `sudo cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`)
+    ]);
     // Extract only the certificate block
     const certMatch = clientCertRaw.match(
       /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/
     );
     const clientCert = certMatch ? certMatch[0] : "";
-    const clientKey = await execCommand(
-      conn,
-      `sudo cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`
-    );
     conn.end();
 
     // Step 8: Build OpenVPN profile
