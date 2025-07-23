@@ -19,22 +19,21 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js version
-        uses: actions/setup-node@v4.4.0
+        uses: actions/setup-node@v3
         with:
           node-version: '22.x'
 
       - name: npm install, build, and test
-        working-directory: ./app
         run: |
           npm install
           npm run build --if-present
           npm run test --if-present
 
       - name: Zip artifact for deployment
-        run: cd app && zip -r ../release.zip ./*
+        run: zip release.zip ./* -r
 
       - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           name: node-app
           path: release.zip
@@ -48,19 +47,19 @@ jobs:
 
     steps:
       - name: Download artifact from build job
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@v4
         with:
           name: node-app
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
-
+      
       - name: Login to Azure
-        uses: azure/login@v2.3.0
+        uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_12D735DB0B2E49949C214E2CA405A25A }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_089CFCD7DABA4936A7794824A1B07B7F }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_1150B78CD4AC4B56827D41ED4A6F6D5D }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_3F852E9858A64537A9149A1949364F32 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3457B5F8BAB249A09E3D7207378E069B }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BF676EBE47FD452185785FB6AD6603EA }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -69,4 +68,4 @@ jobs:
           app-name: 'bwc-ovpn-webapp'
           slot-name: 'Production'
           package: .
-
+          
