@@ -35,17 +35,17 @@ app.use(compression());
 const serverList = [
   {
     key: "app1",
-    name: process.env.OVPN_SERVER1_NAME || "App1",
+    name: process.env.OVPN_SERVER1_NAME || "undefined",
     ip: process.env.OVPN_SERVER1_IP_PUBLIC || "undefined",
   },
   {
     key: "app2",
-    name: process.env.OVPN_SERVER2_NAME || "App2",
+    name: process.env.OVPN_SERVER2_NAME || "undefined2",
     ip: process.env.OVPN_SERVER2_IP_PUBLIC || "undefined",
   },
   {
     key: "app3",
-    name: process.env.OVPN_SERVER3_NAME || "App3",
+    name: process.env.OVPN_SERVER3_NAME || "undefined",
     ip: process.env.OVPN_SERVER3_IP_PUBLIC || "undefined",
   },
 ];
