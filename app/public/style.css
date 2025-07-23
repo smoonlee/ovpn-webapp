@@ -120,6 +120,11 @@ select:focus {
   border-color: #ff4444 !important;
 }
 
+.input-success {
+  border-color: #28a745 !important;
+  background-color: #ffffff;
+}
+
 button {
   width: 100%;
   padding: 14px;

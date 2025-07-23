@@ -23,10 +23,22 @@
       <input type="text" id="customerName" name="customerName" placeholder="e.g. Acme Corp" required>
 
       <label for="azureSubnet">Azure Subnet:</label>
-      <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required>
+      <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required
+        oninput="validateCIDR(this)"
+        title="Enter a valid CIDR (e.g. 10.0.1.0/24)" />
 
       <label for="customerNetwork">Customer Network:</label>
-      <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required>
+      <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required
+        oninput="validateCIDR(this)"
+        title="Enter a valid CIDR (e.g. 192.168.10.0/24)" />
+        <script>
+        function validateCIDR(input) {
+      const valid = isValidCIDR(input.value);
+      setFieldError(input, !valid);
+      input.title = valid ? "" : "Invalid CIDR format. Example: 10.0.1.0/24";
+      input.classList.toggle('input-success', valid);
+        }
+        </script>
 
       <button type="submit" id="submitBtn">Generate</button>
       <button type="button" id="clearConsole">Clear Console</button>
