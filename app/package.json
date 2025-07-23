@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "OpenVPN config generator with Azure SSH and Key Vault integration",
   "main": "server.js",
+  "license": "MIT",
   "scripts": {
     "start": "node server.js"
   },
@@ -12,7 +13,7 @@
     "@azure/keyvault-secrets": "4.10.0",
     "ssh2": "1.16.0",
     "ws": "8.18.3",
-    "compression": "1.8.0"
-
+    "compression": "1.8.0",
+    "dotenv": "10.0.0"
   }
 }
