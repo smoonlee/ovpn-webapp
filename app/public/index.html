@@ -20,25 +20,13 @@
       <input type="text" id="customerName" name="customerName" placeholder="e.g. Acme Corp" required>
 
       <label for="azureSubnet">Azure Subnet:</label>
-      <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required
-        oninput="validateCIDR(this)"
-        title="Enter a valid CIDR (e.g. 10.0.1.0/24)" />
+      <input type="text" id="azureSubnet" name="azureSubnet" placeholder="e.g. 10.0.1.0/24" required oninput="validateCIDR(this)" title="Enter a valid CIDR (e.g. 10.0.1.0/24)" />
 
       <label for="customerNetwork">Customer Network:</label>
-      <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required
-        oninput="validateCIDR(this)"
-        title="Enter a valid CIDR (e.g. 192.168.10.0/24)" />
-        <script>
-        function validateCIDR(input) {
-      const valid = isValidCIDR(input.value);
-      setFieldError(input, !valid);
-      input.title = valid ? "" : "Invalid CIDR format. Example: 10.0.1.0/24";
-      input.classList.toggle('input-success', valid);
-        }
-        </script>
+      <input type="text" id="customerNetwork" name="customerNetwork" placeholder="e.g. 192.168.10.0/24" required oninput="validateCIDR(this)" title="Enter a valid CIDR (e.g. 192.168.10.0/24)" />
 
       <div class="button-row">
-        <button type="submit" id="submitBtn">Create</button>
+        <button type="submit" id="submitBtn">Generate</button>
         <button type="button" id="clearConsole">Clear</button>
       </div>
     </form>
@@ -49,6 +37,12 @@
   </div>
 
 <script>
+function validateCIDR(input) {
+  const valid = isValidCIDR(input.value);
+  setFieldError(input, !valid);
+  input.title = valid ? "" : "Invalid CIDR format. Example: 10.0.1.0/24";
+  input.classList.toggle('input-success', valid);
+}
 
 const consoleOutput = document.getElementById('console');
 const form = document.getElementById('vpnForm');
@@ -116,14 +110,17 @@ function setFieldError(input, isError) {
 
 function connectWebSocket() {
   try {
-    const ws = new WebSocket(`wss://${window.location.host}`);
-    ws.onopen = () => log('Secure WebSocket connection established', 'success');
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}`);
+    ws.onopen = () => log(`${wsProtocol.toUpperCase()} WebSocket connection established`, 'success');
     ws.onmessage = event => {
       try {
         const data = JSON.parse(event.data);
         log(data.message, data.type);
+        console.log(`[WebSocket] ${data.type}: ${data.message}`);
       } catch (e) {
         log('Invalid WebSocket message received', 'error');
+        console.error('Invalid WebSocket message received', e);
       }
     };
     ws.onerror = err => {
@@ -139,11 +136,7 @@ function connectWebSocket() {
   }
 }
 
-if (window.location.protocol === 'https:') {
-  connectWebSocket();
-} else {
-  log('Error: HTTPS is required to use this app.', 'error');
-}
+connectWebSocket();
 
 form.addEventListener('submit', async e => {
   e.preventDefault();

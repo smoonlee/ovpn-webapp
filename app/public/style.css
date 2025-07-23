@@ -1,13 +1,16 @@
+/* Box-sizing reset for all elements */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
+/* Remove default margin/padding and prevent horizontal overflow */
 html, body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
 }
 
+/* Main body styling */
 body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background: linear-gradient(135deg, #e3f2fd, #f4f4f4);
@@ -18,14 +21,17 @@ body {
   padding: 20px;
 }
 
+/* Layout container for form and console */
 .container {
   display: flex;
-  gap: 20px;
+  gap: 40px;
   max-width: 1000px;
   width: 100%;
   margin: 0 auto;
+  align-items: center;
 }
 
+/* Form section styling */
 .form-container {
   background-color: #ffffff;
   padding: 30px;
@@ -33,10 +39,11 @@ body {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 400px;
-  height: 550px;
+  height: 540px;
   animation: fadeIn 0.6s ease-out;
 }
 
+/* Console output section styling */
 .console-container {
   background-color: #1e1e1e;
   padding: 20px 20px 0 20px;
@@ -44,11 +51,12 @@ body {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 600px;
-  height: 550px;
+  height: 540px;
   overflow-y: auto;
   animation: fadeIn 0.6s ease-out;
 }
 
+/* Console output text styles */
 .console-output {
   font-family: "Consolas", "Monaco", monospace;
   color: #00ff00;
@@ -62,6 +70,7 @@ body {
   height: 100%;
 }
 
+/* Console message types */
 .console-timestamp {
   color: #888;
   margin-right: 8px;
@@ -79,6 +88,7 @@ body {
   color: #00bfff;
 }
 
+/* Fade-in animation for containers */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -90,12 +100,14 @@ body {
   }
 }
 
+/* Headings */
 h2 {
   text-align: center;
   color: #333;
   margin-bottom: 25px;
 }
 
+/* Form labels */
 label {
   display: block;
   margin-bottom: 6px;
@@ -103,27 +115,32 @@ label {
   color: #333;
 }
 
+/* Inputs and selects */
 input,
 select {
   width: 100%;
-  padding: 12px 14px;
-  margin-bottom: 20px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
   font-size: 15px;
-  transition: all 0.3s ease;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background: #f8fafc;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 input:focus,
 select:focus {
-  border-color: #007BFF;
-  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+  border-color: #1e88e5;
+  box-shadow: 0 0 5px rgba(30, 136, 229, 0.25);
   outline: none;
 }
 
+/* Input states */
 .input-error {
-  border-color: #ff4444 !important;
+  border-color: #e53935 !important;
   position: relative;
+  box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.15);
 }
 
 .input-error[title]:hover::after {
@@ -131,50 +148,60 @@ select:focus {
   position: absolute;
   left: 0;
   top: 100%;
-  background: #ff4444;
+  margin-top: 4px;
+  background: #e53935;
   color: #fff;
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 13px;
   white-space: nowrap;
   z-index: 10;
-  margin-top: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 8px rgba(229, 57, 53, 0.15);
 }
 
 .input-success {
-  border-color: #28a745 !important;
+  border-color: #43a047 !important;
   background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(67, 160, 71, 0.12);
 }
 
-
+/* Button row layout */
 .button-row {
   display: flex;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 16px;
+  margin-top: 18px;
 }
 
+/* Buttons */
 button {
   flex: 1;
-  padding: 14px;
-  background-color: #007BFF;
+  padding: 16px;
+  background-color: #007bff;
   color: white;
   border: none;
-  border-radius: 6px;
-  font-size: 16px;
+  border-radius: 8px;
+  font-size: 17px;
   font-weight: bold;
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.08);
 }
 
 button:hover {
   background-color: #0056b3;
+  box-shadow: 0 4px 16px rgba(0, 123, 255, 0.12);
 }
 
+/* Clear console button */
 #clearConsole {
   background-color: #6c757d;
 }
 
+#clearConsole:hover {
+  background-color: #495057;
+}
+
+/* Responsive: Tablets */
 @media (max-width: 1024px) {
   .container {
     flex-direction: column;
@@ -187,8 +214,10 @@ button:hover {
   }
 }
 
+/* Responsive: Mobile */
 @media (max-width: 480px) {
-  .form-container, .console-container {
+  .form-container,
+  .console-container {
     padding: 20px;
   }
 
