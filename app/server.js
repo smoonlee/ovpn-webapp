@@ -65,10 +65,13 @@ app.get("/api/servers", (req, res) => {
   console.log("/api/servers env:", {
     OVPN_SERVER1_NAME: process.env.OVPN_SERVER1_NAME,
     OVPN_SERVER1_IP_PUBLIC: process.env.OVPN_SERVER1_IP_PUBLIC,
+    OVPN_SERVER1_IP_PRIVATE: process.env.OVPN_SERVER1_IP_PRIVATE,
     OVPN_SERVER2_NAME: process.env.OVPN_SERVER2_NAME,
     OVPN_SERVER2_IP_PUBLIC: process.env.OVPN_SERVER2_IP_PUBLIC,
+    OVPN_SERVER2_IP_PRIVATE: process.env.OVPN_SERVER2_IP_PRIVATE,
     OVPN_SERVER3_NAME: process.env.OVPN_SERVER3_NAME,
     OVPN_SERVER3_IP_PUBLIC: process.env.OVPN_SERVER3_IP_PUBLIC,
+    OVPN_SERVER3_IP_PRIVATE: process.env.OVPN_SERVER3_IP_PRIVATE,
   });
   res.json(serverList);
 });
