@@ -122,7 +122,11 @@ async function connectSSH(serverKey, key) {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn
-      .on("ready", () => resolve(conn))
+      .on("ready", () => {
+        const serverName = process.env[`OVPN_SERVER${serverKey.slice(-1)}_NAME`] || serverKey;
+        broadcast(`SSH connection to ${serverName} (${serverIP})`, "success");
+        resolve(conn);
+      })
       .on("error", reject)
       .connect({
         host: serverIP,
@@ -185,7 +189,12 @@ app.post("/connect", async (req, res) => {
   try {
     console.log(`[POST /connect] Incoming server key: ${server}`);
     console.log(`[POST /connect] serverIPs mapping:`, serverIPs);
-    if (!serverIPs[server]) throw new Error(`Unknown server (server: ${server}, serverIPs: ${JSON.stringify(serverIPs)})`);
+    if (!serverIPs[server])
+      throw new Error(
+        `Unknown server (server: ${server}, serverIPs: ${JSON.stringify(
+          serverIPs
+        )})`
+      );
     sanitizeInput(customerName, "customer name");
     validateCIDR(customerNetwork);
     validateCIDR(azureSubnet);
@@ -196,37 +205,46 @@ app.post("/connect", async (req, res) => {
     const cust = cidrToNetworkAndMask(customerNetwork);
     const az = cidrToNetworkAndMask(azureSubnet);
 
+    broadcast(""); // Add a line break before cleanup message
     broadcast("Cleaning up previous configuration...");
+
+    // Helper to broadcast and echo a message
+    function broadcastEcho(msg) {
+      broadcast(msg);
+      return `echo "${msg}"`;
+    }
     await execCommand(
       conn,
       `bash -c '
       cd /etc/openvpn/easy-rsa &&
-      ./easyrsa --batch revoke ${customerName} || true &&
-      echo "Certificate for ${customerName} revoked" &&
+      sudo ./easyrsa --batch revoke ${customerName} || true &&
+      ${broadcastEcho(`Certificate for ${customerName} revoked`)} &&
       ./easyrsa --batch gen-crl &&
-      rm -f pki/private/${customerName}.key pki/issued/${customerName}.crt pki/reqs/${customerName}.req &&
-      echo "Removed keys and certificates for ${customerName}" &&
-      rm -f /etc/openvpn/ccd/${customerName} &&
-      echo "Removed  ${customerName} CCD profile for ${customerName}" &&
-      sudo ip route del ${cust.network}/${bits} dev tun0 || true
-      echo "Removed ${customerName} route for ${cust.network}/${bits} on tun0"
+      sudo rm -f pki/private/${customerName}.key pki/issued/${customerName}.crt pki/reqs/${customerName}.req &&
+      ${broadcastEcho(`Removed keys and certificates for ${customerName}`)} &&
+      sudo rm -f /etc/openvpn/ccd/${customerName} &&
+      ${broadcastEcho(`Removed CCD profile for ${customerName}`)} &&
+      sudo ip route del ${cust.network}/${bits} &&
+      ${broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`)}
+      sudo chown -R ${process.env.SSH_USERNAME}: /etc/openvpn/easy-rsa/pki
     '`
     );
 
+    broadcast(""); // Add a line break before cleanup message
     broadcast("Generating certificates...");
     await execCommand(
       conn,
-      `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`
+      `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-req ${customerName} nopass`
     );
     await execCommand(
       conn,
-      `cd /etc/openvpn/easy-rsa && ./easyrsa --batch sign-req client ${customerName}`
+      `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch sign-req client ${customerName}`
     );
 
     broadcast("Creating CCD profile...");
     await execCommand(
       conn,
-      `cat <<EOF > /etc/openvpn/ccd/${customerName}
+      `sudo cat <<EOF > /etc/openvpn/ccd/${customerName}
 ifconfig-push ${cust.network} ${cust.mask}
 push 'route ${az.network} ${az.mask}'
 EOF`
@@ -237,26 +255,27 @@ EOF`
       conn,
       `sudo ip route add ${cust.network}/${bits} dev tun0`
     );
-
-    const clientKey = await execCommand(
-      conn,
-      `cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`
-    );
-    const clientCert = await execCommand(
-      conn,
-      `cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`
-    );
     const caCert = await execCommand(
       conn,
-      `cat /etc/openvpn/easy-rsa/pki/ca.crt`
+      `sudo cat /etc/openvpn/easy-rsa/pki/ca.crt`
     );
-
+    let clientCertRaw = await execCommand(
+      conn,
+      `sudo cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`
+    );
+    // Extract only the certificate block
+    const certMatch = clientCertRaw.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+    const clientCert = certMatch ? certMatch[0] : "";
+    const clientKey = await execCommand(
+      conn,
+      `sudo cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`
+    );
     conn.end();
 
     const profile = [
       "client",
       "dev tun",
-      "proto tcp",
+      "proto udp",
       `remote ${serverIPs[server]} 1194`,
       "resolv-retry infinite",
       "nobind",
