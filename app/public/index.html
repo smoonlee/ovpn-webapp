@@ -37,8 +37,10 @@
         }
         </script>
 
-      <button type="submit" id="submitBtn">Generate</button>
-      <button type="button" id="clearConsole">Clear Console</button>
+      <div class="button-row">
+        <button type="submit" id="submitBtn">Create</button>
+        <button type="button" id="clearConsole">Clear</button>
+      </div>
     </form>
 
     <div class="console-container">
@@ -78,6 +80,16 @@ customerNameInput.value = localStorage.getItem('customerName') || '';
 
 document.getElementById('clearConsole').addEventListener('click', () => {
   consoleOutput.innerHTML = '';
+  // Clear all input fields in the form
+  form.reset();
+  // Remove any input-error or input-success classes
+  Array.from(form.elements).forEach(el => {
+    if (el.classList) {
+      el.classList.remove('input-error', 'input-success');
+    }
+  });
+  // Reset customerName from localStorage
+  localStorage.removeItem('customerName');
 });
 
 function log(message, type = 'info') {
