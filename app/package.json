@@ -5,15 +5,20 @@
   "main": "server.js",
   "license": "MIT",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "cross-env NODE_ENV=development nodemon server.js"
   },
   "dependencies": {
-    "express": "5.1.0",
-    "@azure/identity": "4.10.1",
+    "@azure/identity": "4.10.2",
     "@azure/keyvault-secrets": "4.10.0",
-    "ssh2": "1.16.0",
-    "ws": "8.18.3",
     "compression": "1.8.0",
-    "dotenv": "10.0.0"
+    "dotenv": "10.0.0",
+    "express": "5.1.0",
+    "ssh2": "1.16.0",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "nodemon": "^3.1.10"
   }
 }
