@@ -112,10 +112,14 @@ async function getSSHKey(name) {
   return secret.value;
 }
 
-function connectSSH(serverKey, key) {
+async function connectSSH(serverKey, key) {
   // Ensure we use the private IP from serverIPs mapping
+  // For example, if serverKey is "app1", this will use process.env.OVPN_SERVER1_IP_PRIVATE
   const serverIP = serverIPs[serverKey];
+  const username = process.env.SSH_USERNAME || "undefined";
   if (!serverIP) throw new Error("Unknown server key or missing private IP");
+  console.log(`[connectSSH] username: ${username}, serverIP: ${serverIP}`);
+  console.log(`[connectSSH] SSH key collected from KeyVault: ${!!key && key.startsWith("-----BEGIN")}`);
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn
@@ -123,7 +127,7 @@ function connectSSH(serverKey, key) {
       .on("error", reject)
       .connect({
         host: serverIP,
-        username: process.env.SSH_USERNAME || "appsvc_ovpn",
+        username,
         privateKey: key,
         algorithms: {
           kex: [
