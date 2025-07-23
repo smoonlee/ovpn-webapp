@@ -1,4 +1,3 @@
-
 // =========================
 // Imports & Configuration
 // =========================
@@ -11,6 +10,7 @@ const WebSocket = require("ws");
 const { Client } = require("ssh2");
 const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
+const helmet = require("helmet");
 
 // Load environment variables in development
 if (process.env.NODE_ENV !== "production") {
@@ -36,8 +36,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(compression());
-
-
+app.use(helmet());
 
 // =========================
 // Server List & IP Mapping
@@ -69,7 +68,6 @@ const serverIPs = {
   app3: process.env.OVPN_SERVER3_IP_PRIVATE,
 };
 
-
 // =========================
 // API Endpoints
 // =========================
@@ -88,7 +86,6 @@ app.get("/api/servers", (req, res) => {
   });
   res.json(serverList);
 });
-
 
 // =========================
 // Utility Functions
@@ -141,13 +138,21 @@ async function connectSSH(serverKey, key) {
   console.log(`[connectSSH] serverKey: ${serverKey}`);
   console.log(`[connectSSH] serverIP: ${serverIP}`);
   console.log(`[connectSSH] username: ${username}`);
-  console.log(`[connectSSH] SSH key collected from KeyVault: ${!!key && key.startsWith("-----BEGIN")}`);
-  if (!serverIP) throw new Error(`Unknown server key or missing private IP (serverKey: ${serverKey}, serverIP: ${serverIP})`);
+  console.log(
+    `[connectSSH] SSH key collected from KeyVault: ${
+      !!key && key.startsWith("-----BEGIN")
+    }`
+  );
+  if (!serverIP)
+    throw new Error(
+      `Unknown server key or missing private IP (serverKey: ${serverKey}, serverIP: ${serverIP})`
+    );
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn
       .on("ready", () => {
-        const serverName = process.env[`OVPN_SERVER${serverKey.slice(-1)}_NAME`] || serverKey;
+        const serverName =
+          process.env[`OVPN_SERVER${serverKey.slice(-1)}_NAME`] || serverKey;
         broadcast(`SSH connection to ${serverName} (${serverIP})`, "success");
         resolve(conn);
       })
@@ -208,7 +213,6 @@ function broadcast(msg, type = "info") {
   );
 }
 
-
 // =========================
 // Main Workflow: Connect & Generate OpenVPN Profile
 // =========================
@@ -223,7 +227,9 @@ app.post("/connect", async (req, res) => {
     console.log(`[POST /connect] serverIPs mapping:`, serverIPs);
     if (!serverIPs[server])
       throw new Error(
-        `Unknown server (server: ${server}, serverIPs: ${JSON.stringify(serverIPs)})`
+        `Unknown server (server: ${server}, serverIPs: ${JSON.stringify(
+          serverIPs
+        )})`
       );
     sanitizeInput(customerName, "customer name");
     validateCIDR(customerNetwork);
@@ -243,22 +249,41 @@ app.post("/connect", async (req, res) => {
       broadcast(msg);
       return `echo "${msg}"`;
     }
-    await execCommand(
-      conn,
-      [
-        `cd /etc/openvpn/easy-rsa`,
-        `sudo ./easyrsa --batch revoke '${customerName}' || true`,
-        broadcastEcho(`Certificate for ${customerName} revoked`),
-        `./easyrsa --batch gen-crl`,
-        `sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`,
-        broadcastEcho(`Removed keys and certificates for ${customerName}`),
-        `sudo rm -f /etc/openvpn/ccd/'${customerName}'`,
-        broadcastEcho(`Removed CCD profile for ${customerName}`),
-        `sudo ip route del '${cust.network}/${bits}' || true`,
-        broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`),
-        `sudo chown -R '${process.env.SSH_USERNAME}': /etc/openvpn/easy-rsa/pki`
-      ].join(' && ')
-    );
+
+    // Pre-check: If certificate exists, revoke and clean up
+    const certExistsCmd = `test -f /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt && echo "EXISTS" || echo "NOT_EXISTS"`;
+    const certExists = await execCommand(conn, certExistsCmd);
+
+    if (certExists === "EXISTS") {
+      // Check for CCD profile existence
+      const ccdExistsCmd = `test -f /etc/openvpn/ccd/${customerName} && echo "CCD_EXISTS" || echo "CCD_NOT_EXISTS"`;
+      const ccdExists = await execCommand(conn, ccdExistsCmd);
+
+      await execCommand(
+        conn,
+        [
+          `cd /etc/openvpn/easy-rsa`,
+          `sudo ./easyrsa --batch revoke '${customerName}' `,
+          broadcastEcho(`Certificate for ${customerName} revoked`),
+
+          `sudo ./easyrsa --batch gen-crl`,
+          `sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`,
+          broadcastEcho(`Removed keys and certificates for ${customerName}`),
+
+          ccdExists === "CCD_EXISTS"
+        ? `sudo rm -f /etc/openvpn/ccd/'${customerName}' && ${broadcastEcho(
+            `Removed CCD profile for ${customerName}`
+          )}`
+        : broadcastEcho(`No CCD profile found for ${customerName}`),
+
+          `sudo ip route del '${cust.network}/${bits}'`,
+          broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`),
+          `sudo chown -R '${process.env.SSH_USERNAME}': /etc/openvpn/easy-rsa/pki`,
+        ].join(" && ")
+      );
+    } else {
+      broadcast(`No certificate found for ${customerName}`);
+    }
 
     // Step 4: Generate new certificates
     broadcast("");
@@ -286,7 +311,7 @@ app.post("/connect", async (req, res) => {
     broadcast(`Adding route ${cust.network}/${bits} to tun0...`);
     await execCommand(
       conn,
-      `sudo ip route add ${cust.network}/${bits} dev tun0 || true`
+      `sudo ip route add ${cust.network}/${bits} dev tun0`
     );
 
     // Step 7: Collect certificates and keys
@@ -299,7 +324,9 @@ app.post("/connect", async (req, res) => {
       `sudo cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`
     );
     // Extract only the certificate block
-    const certMatch = clientCertRaw.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+    const certMatch = clientCertRaw.match(
+      /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/
+    );
     const clientCert = certMatch ? certMatch[0] : "";
     const clientKey = await execCommand(
       conn,
@@ -340,12 +367,12 @@ app.post("/connect", async (req, res) => {
       "Content-Disposition": `attachment; filename=\"${customerName}.ovpn\"`,
     });
     res.send(profile);
+
   } catch (err) {
     console.error("[Error]", err);
     res.status(500).json({ error: "Failed to connect", details: err.message });
   }
 });
-
 
 // =========================
 // WebSocket Server Setup
