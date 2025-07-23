@@ -1,15 +1,18 @@
+
+// =========================
+// Imports & Configuration
+// =========================
 const path = require("path");
 const fs = require("fs").promises;
-
 const express = require("express");
 const compression = require("compression");
 const http = require("http");
 const WebSocket = require("ws");
-
 const { Client } = require("ssh2");
 const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 
+// Load environment variables in development
 if (process.env.NODE_ENV !== "production") {
   require("dotenv").config({
     path: path.join(__dirname, ".env.local"),
@@ -22,7 +25,9 @@ const keyVaultUrl = `https://${process.env.KEY_VAULT_NAME}.vault.azure.net`;
 const credential = new DefaultAzureCredential();
 const secretClient = new SecretClient(keyVaultUrl, credential);
 
+// =========================
 // Middleware
+// =========================
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
@@ -33,6 +38,10 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(compression());
 
 
+
+// =========================
+// Server List & IP Mapping
+// =========================
 const serverList = [
   {
     key: "app1",
@@ -60,6 +69,11 @@ const serverIPs = {
   app3: process.env.OVPN_SERVER3_IP_PRIVATE,
 };
 
+
+// =========================
+// API Endpoints
+// =========================
+// List available OpenVPN servers
 app.get("/api/servers", (req, res) => {
   console.log("/api/servers env:", {
     OVPN_SERVER1_NAME: process.env.OVPN_SERVER1_NAME,
@@ -75,6 +89,12 @@ app.get("/api/servers", (req, res) => {
   res.json(serverList);
 });
 
+
+// =========================
+// Utility Functions
+// =========================
+
+// Sanitize user input for safety
 function sanitizeInput(input, label = "input") {
   if (!/^[a-zA-Z0-9_-]+$/.test(input)) {
     throw new Error(
@@ -84,6 +104,7 @@ function sanitizeInput(input, label = "input") {
   return input;
 }
 
+// Validate CIDR notation
 function validateCIDR(cidr) {
   const cidrRegex = /^\d{1,3}(\.\d{1,3}){3}\/([0-9]|[1-2][0-9]|3[0-2])$/;
   if (!cidrRegex.test(cidr)) throw new Error("Invalid CIDR format");
@@ -92,6 +113,7 @@ function validateCIDR(cidr) {
     throw new Error("Invalid IP address in CIDR");
 }
 
+// Convert CIDR to network and mask
 function cidrToNetworkAndMask(cidr) {
   const [ip, bits] = cidr.split("/");
   const numBits = parseInt(bits);
@@ -104,6 +126,7 @@ function cidrToNetworkAndMask(cidr) {
   return { network: ip, mask: maskParts.join(".") };
 }
 
+// Retrieve SSH key from Azure Key Vault
 async function getSSHKey(name) {
   const secret = await secretClient.getSecret(name);
   if (!secret.value.startsWith("-----BEGIN"))
@@ -111,6 +134,7 @@ async function getSSHKey(name) {
   return secret.value;
 }
 
+// Establish SSH connection to server
 async function connectSSH(serverKey, key) {
   const serverIP = serverIPs[serverKey];
   const username = process.env.SSH_USERNAME || "undefined";
@@ -146,6 +170,7 @@ async function connectSSH(serverKey, key) {
   });
 }
 
+// Execute a command over SSH
 function execCommand(conn, cmd) {
   return new Promise((resolve, reject) => {
     conn.exec(cmd, (err, stream) => {
@@ -170,6 +195,7 @@ function execCommand(conn, cmd) {
   });
 }
 
+// WebSocket broadcast utility
 const connections = new Set();
 function broadcast(msg, type = "info") {
   const payload = JSON.stringify({
@@ -182,55 +208,60 @@ function broadcast(msg, type = "info") {
   );
 }
 
+
+// =========================
+// Main Workflow: Connect & Generate OpenVPN Profile
+// =========================
 app.post("/connect", async (req, res) => {
+  // Extract request parameters
   const { server, customerName, customerNetwork, azureSubnet } = req.body;
   const keyName = process.env.SSH_SECRET_NAME;
 
   try {
+    // Step 1: Validate input
     console.log(`[POST /connect] Incoming server key: ${server}`);
     console.log(`[POST /connect] serverIPs mapping:`, serverIPs);
     if (!serverIPs[server])
       throw new Error(
-        `Unknown server (server: ${server}, serverIPs: ${JSON.stringify(
-          serverIPs
-        )})`
+        `Unknown server (server: ${server}, serverIPs: ${JSON.stringify(serverIPs)})`
       );
     sanitizeInput(customerName, "customer name");
     validateCIDR(customerNetwork);
     validateCIDR(azureSubnet);
 
+    // Step 2: Get SSH key and connect
     const sshKey = await getSSHKey(keyName);
     const conn = await connectSSH(server, sshKey);
     const [_, bits] = customerNetwork.split("/");
     const cust = cidrToNetworkAndMask(customerNetwork);
     const az = cidrToNetworkAndMask(azureSubnet);
 
+    // Step 3: Cleanup previous configuration
     broadcast(""); // Add a line break before cleanup message
     broadcast("Cleaning up previous configuration...");
-
-    // Helper to broadcast and echo a message
     function broadcastEcho(msg) {
       broadcast(msg);
       return `echo "${msg}"`;
     }
     await execCommand(
       conn,
-      `bash -c '
-      cd /etc/openvpn/easy-rsa &&
-      sudo ./easyrsa --batch revoke ${customerName} || true &&
-      ${broadcastEcho(`Certificate for ${customerName} revoked`)} &&
-      ./easyrsa --batch gen-crl &&
-      sudo rm -f pki/private/${customerName}.key pki/issued/${customerName}.crt pki/reqs/${customerName}.req &&
-      ${broadcastEcho(`Removed keys and certificates for ${customerName}`)} &&
-      sudo rm -f /etc/openvpn/ccd/${customerName} &&
-      ${broadcastEcho(`Removed CCD profile for ${customerName}`)} &&
-      sudo ip route del ${cust.network}/${bits} &&
-      ${broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`)}
-      sudo chown -R ${process.env.SSH_USERNAME}: /etc/openvpn/easy-rsa/pki
-    '`
+      [
+        `cd /etc/openvpn/easy-rsa`,
+        `sudo ./easyrsa --batch revoke '${customerName}' || true`,
+        broadcastEcho(`Certificate for ${customerName} revoked`),
+        `./easyrsa --batch gen-crl`,
+        `sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`,
+        broadcastEcho(`Removed keys and certificates for ${customerName}`),
+        `sudo rm -f /etc/openvpn/ccd/'${customerName}'`,
+        broadcastEcho(`Removed CCD profile for ${customerName}`),
+        `sudo ip route del '${cust.network}/${bits}' || true`,
+        broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`),
+        `sudo chown -R '${process.env.SSH_USERNAME}': /etc/openvpn/easy-rsa/pki`
+      ].join(' && ')
     );
 
-    broadcast(""); // Add a line break before cleanup message
+    // Step 4: Generate new certificates
+    broadcast("");
     broadcast("Generating certificates...");
     await execCommand(
       conn,
@@ -241,20 +272,24 @@ app.post("/connect", async (req, res) => {
       `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch sign-req client ${customerName}`
     );
 
+    // Step 5: Create CCD profile
     broadcast("Creating CCD profile...");
     await execCommand(
       conn,
       `sudo cat <<EOF > /etc/openvpn/ccd/${customerName}
-ifconfig-push ${cust.network} ${cust.mask}
-push 'route ${az.network} ${az.mask}'
-EOF`
+      ifconfig-push ${cust.network} ${cust.mask}
+      push \"route ${az.network} ${az.mask}\"
+      EOF`
     );
 
-    broadcast("Adding route to tun0...");
+    // Step 6: Add route to tun0
+    broadcast(`Adding route ${cust.network}/${bits} to tun0...`);
     await execCommand(
       conn,
-      `sudo ip route add ${cust.network}/${bits} dev tun0`
+      `sudo ip route add ${cust.network}/${bits} dev tun0 || true`
     );
+
+    // Step 7: Collect certificates and keys
     const caCert = await execCommand(
       conn,
       `sudo cat /etc/openvpn/easy-rsa/pki/ca.crt`
@@ -272,6 +307,7 @@ EOF`
     );
     conn.end();
 
+    // Step 8: Build OpenVPN profile
     const profile = [
       "client",
       "dev tun",
@@ -298,6 +334,7 @@ EOF`
       "</key>",
     ].join("\n");
 
+    // Step 9: Send profile as response
     res.set({
       "Content-Type": "application/x-openvpn-profile",
       "Content-Disposition": `attachment; filename=\"${customerName}.ovpn\"`,
@@ -309,6 +346,10 @@ EOF`
   }
 });
 
+
+// =========================
+// WebSocket Server Setup
+// =========================
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, clientTracking: true });
 
@@ -322,6 +363,7 @@ wss.on("connection", (ws) => {
   ws.on("close", () => connections.delete(ws));
 });
 
+// Heartbeat for WebSocket connections
 setInterval(() => {
   connections.forEach((ws) => {
     if (!ws.isAlive) return ws.terminate();
@@ -330,4 +372,7 @@ setInterval(() => {
   });
 }, 30000);
 
+// =========================
+// Start HTTP Server
+// =========================
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
