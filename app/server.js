@@ -8,9 +8,11 @@ const compression = require("compression");
 const http = require("http");
 const WebSocket = require("ws");
 const { Client } = require("ssh2");
-const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 const helmet = require("helmet");
+
+//const { DefaultAzureCredential } = require("@azure/identity");
+const { ManagedIdentityCredential } = require("@azure/identity");
 
 // Load environment variables in development
 if (process.env.NODE_ENV !== "production") {
@@ -22,7 +24,8 @@ if (process.env.NODE_ENV !== "production") {
 const app = express();
 const PORT = process.env.PORT || 8080;
 const keyVaultUrl = `https://${process.env.KEY_VAULT_NAME}.vault.azure.net`;
-const credential = new DefaultAzureCredential();
+//const credential = new DefaultAzureCredential();
+const credential = new ManagedIdentityCredential(process.env.USER_ASSIGNED_CLIENT_ID);
 const secretClient = new SecretClient(keyVaultUrl, credential);
 
 // =========================
@@ -50,7 +53,7 @@ const serverList = [
   },
   {
     key: "app2",
-    name: process.env.OVPN_SERVER2_NAME || "undefined2",
+    name: process.env.OVPN_SERVER2_NAME || "undefined",
     ipPublic: process.env.OVPN_SERVER2_IP_PUBLIC || "undefined",
     ipPrivate: process.env.OVPN_SERVER2_IP_PRIVATE || "undefined",
   },
