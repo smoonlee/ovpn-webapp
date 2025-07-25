@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Node.js app to Azure Web App - app-bwc-openvpn-web-dev-weu
+name: Build and deploy - app-bwc-openvpn-web-acc-weu
 
 on:
   push:
@@ -54,19 +54,19 @@ jobs:
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
-
+      
       - name: Login to Azure
         uses: azure/login@v2.3.0
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_126D6AFF0035477A949B4450E4F02C42 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7E1D25AEACA84668AF6F2AFBFC977A59 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_FB9239CAF36C446098674376F0BA99E6 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_0D254EBC72CA47998B4156A32F831765 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_A7D0D8B571A742AAAC91F5D9D8054F13 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_411DF45ECC2442CAAAD08E376C809887 }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'app-bwc-openvpn-web-dev-weu'
+          app-name: 'app-bwc-openvpn-web-acc-weu'
           slot-name: 'Production'
           package: .
           
