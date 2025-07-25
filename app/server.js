@@ -25,7 +25,7 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 const keyVaultUrl = `https://${process.env.KEY_VAULT_NAME}.vault.azure.net`;
 //const credential = new DefaultAzureCredential();
-const credential = new ManagedIdentityCredential(process.env.USER_ASSIGNED_CLIENT_ID);
+const credential = new ManagedIdentityCredential(process.env.CLIENT_ID);
 const secretClient = new SecretClient(keyVaultUrl, credential);
 
 // =========================
