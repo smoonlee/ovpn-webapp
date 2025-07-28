@@ -45,12 +45,13 @@ A Node.js web application for managing OpenVPN client configurations and certifi
 
 Copy `.env.local` from `app/` as a template for your environment variables. Example:
 
+
 ```env
 # Azure Key Vault name (without https:// and .vault.azure.net)
-KEY_VAULT_NAME=kv-bwc-openvpn-dev-weu
+KEY_VAULT_NAME=your-keyvault-name
 
 # Client ID for Managed Identity (optional, used for user-assigned identities)
-CLIENT_ID=''
+CLIENT_ID=
 
 # SSH secret name stored in Key Vault
 SSH_SECRET_NAME=ssh-private-key
@@ -73,7 +74,7 @@ OVPN_SERVER3_IP_PRIVATE=10.0.0.70
 PORT=8080
 
 # Secret name for CA password in Azure Key Vault (used for certificate signing)
-EASYRSA_PASS_SECRET_NAME=ca-password
+CA_PASSWORD=ca-password
 ```
 
 **Note:** All secrets (SSH key, CA password) must be present in Azure Key Vault. The app uses Managed Identity for authentication.
@@ -87,7 +88,7 @@ EASYRSA_PASS_SECRET_NAME=ca-password
    ```bash
    npm install
    ```
-4. Copy and edit `.env.local` as needed for your environment.
+4. Copy and edit `app/.env.local` as needed for your environment.
 5. Start the server:
    ```bash
    npm start

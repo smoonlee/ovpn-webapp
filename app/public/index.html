@@ -10,29 +10,7 @@
   <div class="container">
     <form id="vpnForm" class="form-container">
       <h2 class="main-title">OpenVPN Configurator [Dev]</h2>
-      <div id="bootTimestamp" class="boot-timestamp">
-        <span id="bootLabel">App Service Boot:</span>
-        <span id="bootValue" class="boot-value">Loading...</span>
-      </div>
-      <script>
-      // Fetch boot/restart timestamp from the server and format for display
-      fetch('/api/boot-timestamp')
-        .then(res => res.ok ? res.text() : Promise.reject('Failed to load boot timestamp'))
-        .then(ts => {
-          let formatted = ts;
-          try {
-            const date = new Date(ts);
-            if (!isNaN(date.getTime())) {
-              const pad = n => n.toString().padStart(2, '0');
-              formatted = `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()}, ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} GMT`;
-            }
-            } catch {}
-            const bootValueElem = document.getElementById('bootValue');
-          })
-          .catch(() => {
-            document.getElementById('bootValue').textContent = 'unavailable';
-        });
-      </script>
+      <!-- App Service Boot removed -->
       <p></p>
 
       <label for="server">Select Server:</label>

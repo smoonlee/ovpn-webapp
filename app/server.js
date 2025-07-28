@@ -90,12 +90,7 @@ app.get("/api/servers", (req, res) => {
   res.json(serverList);
 });
 
-// App boot timestamp endpoint (always UTC/ISO8601)
-const BOOT_TIMESTAMP = new Date();
-
-app.get("/api/boot-timestamp", (req, res) => {
-  res.type("text/plain").send(BOOT_TIMESTAMP.toISOString());
-});
+// App Service Boot endpoint removed
 
 // =========================
 // Utility Functions
@@ -405,7 +400,7 @@ app.post("/connect", async (req, res) => {
 });
 
 // =========================
-// WebSocket Server Setup
+// WebSocket Server Setup (App Service Boot removed)
 // =========================
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, clientTracking: true });
@@ -413,12 +408,11 @@ const wss = new WebSocket.Server({ server, clientTracking: true });
 wss.on("connection", (ws) => {
   ws.isAlive = true;
   connections.add(ws);
-  // Send the current boot timestamp to the client for restart detection
+  // Send the current connection message (boot timestamp removed)
   ws.send(
     JSON.stringify({
       message: "Connected to WebSocket",
-      type: "success",
-      bootTimestamp: BOOT_TIMESTAMP.toISOString(),
+      type: "success"
     })
   );
   ws.on("pong", () => (ws.isAlive = true));
