@@ -408,7 +408,6 @@ app.post("/connect", async (req, res) => {
 // WebSocket Server Setup
 // =========================
 const server = http.createServer(app);
-wss.on("connection", (ws) => {
 const wss = new WebSocket.Server({ server, clientTracking: true });
 
 wss.on("connection", (ws) => {
