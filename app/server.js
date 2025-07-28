@@ -274,22 +274,22 @@ app.post("/connect", async (req, res) => {
       const ccdExists = await execCommand(conn, ccdExistsCmd);
 
       // Run easy-rsa commands with working directory
-      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch revoke '${customerName}'`);
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke '${customerName}'`);
       await execCommand(conn, broadcastEcho(`Certificate for ${customerName} revoked`));
-      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-crl`);
-      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`);
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-crl`);
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`);
       await execCommand(conn, broadcastEcho(`Removed keys and certificates for ${customerName}`));
 
       if (ccdExists === "CCD_EXISTS") {
-        await execCommand(conn, `sudo rm -f /etc/openvpn/ccd/'${customerName}'`);
+        await execCommand(conn, `rm -f /etc/openvpn/ccd/'${customerName}'`);
         await execCommand(conn, broadcastEcho(`Removed CCD profile for ${customerName}`));
       } else {
         await execCommand(conn, broadcastEcho(`No CCD profile found for ${customerName}`));
       }
 
-      await execCommand(conn, `sudo ip route del '${cust.network}/${bits}'`);
+      await execCommand(conn, `ip route del '${cust.network}/${bits}'`);
       await execCommand(conn, broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`));
-      await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo chown -R '${process.env.SSH_USERNAME}': pki`);
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && chown -R '${process.env.SSH_USERNAME}': pki`);
     } else {
       broadcast(`No certificate found for ${customerName}`);
     }
