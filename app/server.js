@@ -226,6 +226,7 @@ function broadcast(msg, type = "info") {
 // =========================
 // Main Workflow: Connect & Generate OpenVPN Profile
 // =========================
+
 app.post("/connect", async (req, res) => {
   // Extract request parameters
   const { server, customerName, customerNetwork, azureSubnet } = req.body;
@@ -270,7 +271,12 @@ app.post("/connect", async (req, res) => {
       const ccdExists = await execCommand(conn, ccdExistsCmd);
 
       // Run easy-rsa commands with working directory
-      await execCommand(conn, `cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke '${customerName}'`);
+      // Retrieve the CA password from Azure Key Vault and revoke the client certificate
+      const caPasswordSecretName = process.env.CA_PASSWORD;
+      const caPasswordSecret = await secretClient.getSecret(caPasswordSecretName);
+      const caPassword = caPasswordSecret.value || "";
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && echo '${caPassword}' | ./easyrsa --batch revoke '${customerName}'`);
+      
       await execCommand(conn, broadcastEcho(`Certificate for ${customerName} revoked`));
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-crl`);
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`);
