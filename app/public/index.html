@@ -94,8 +94,6 @@ async function populateServerDropdown() {
 populateServerDropdown();
 
 consoleOutput.innerHTML = '';
-customerNameInput.value = localStorage.getItem('customerName') || '';
-
 document.getElementById('clearConsole').addEventListener('click', () => {
   consoleOutput.innerHTML = '';
   // Clear all input fields in the form
