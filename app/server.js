@@ -408,13 +408,19 @@ app.post("/connect", async (req, res) => {
 // WebSocket Server Setup
 // =========================
 const server = http.createServer(app);
+wss.on("connection", (ws) => {
 const wss = new WebSocket.Server({ server, clientTracking: true });
 
 wss.on("connection", (ws) => {
   ws.isAlive = true;
   connections.add(ws);
+  // Send the current boot timestamp to the client for restart detection
   ws.send(
-    JSON.stringify({ message: "Connected to WebSocket", type: "success" })
+    JSON.stringify({
+      message: "Connected to WebSocket",
+      type: "success",
+      bootTimestamp: BOOT_TIMESTAMP.toISOString(),
+    })
   );
   ws.on("pong", () => (ws.isAlive = true));
   ws.on("close", () => connections.delete(ws));
