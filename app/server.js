@@ -289,7 +289,7 @@ app.post("/connect", async (req, res) => {
         await execCommand(conn, broadcastEcho(`No CCD profile found for ${customerName}`));
       }
 
-      await execCommand(conn, `ip route del '${cust.network}/${bits}'`);
+      await execCommand(conn, `sudo -n ip route del '${cust.network}/${bits}'`);
       await execCommand(conn, broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`));
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && chown -R '${process.env.SSH_USERNAME}': pki`);
     } else {
@@ -320,7 +320,7 @@ app.post("/connect", async (req, res) => {
     // Step 6: Add route to tun0
     broadcast(`Adding route ${cust.network}/${bits} to tun0...`);
     // Check if route already exists
-    const routeCheckCmd = `ip route | grep -w '${cust.network}/${bits}'`;
+    const routeCheckCmd = `sudo -n ip route | grep -w '${cust.network}/${bits}'`;
     let routeExists = false;
     try {
       const routeCheckResult = await execCommand(conn, routeCheckCmd);
