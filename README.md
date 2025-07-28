@@ -40,23 +40,64 @@ A Node.js web application for managing OpenVPN client configurations and certifi
 - Azure Key Vault instance
 - SSH access to OpenVPN servers
 
+
 ## Environment Variables
 
-The following environment variables need to be configured:
+Copy `.env.local` from `app/` as a template for your environment variables. Example:
 
 ```env
-PORT=8080 # Optional, defaults to 8080
-KEY_VAULT_NAME=your-keyvault-name
-SSH_SECRET_NAME=your-ssh-key-secret-name
-SSH_USERNAME=appsvc_ovpn # Optional, defaults to appsvc_ovpn
-OVPN_SERVER1_IP=xxx.xxx.xxx.xxx
-OVPN_SERVER2_IP=xxx.xxx.xxx.xxx
-OVPN_SERVER3_IP=xxx.xxx.xxx.xxx
+# Azure Key Vault name (without https:// and .vault.azure.net)
+KEY_VAULT_NAME=kv-bwc-openvpn-dev-weu
+
+# Client ID for Managed Identity (optional, used for user-assigned identities)
+CLIENT_ID=''
+
+# SSH secret name stored in Key Vault
+SSH_SECRET_NAME=ssh-private-key
+
+# SSH username for connecting to OpenVPN server
+SSH_USERNAME=appsvc_ovpn
+
+# OpenVPN server IPs and names for frontend dropdown
+OVPN_SERVER1_NAME=Matrix
+OVPN_SERVER1_IP_PUBLIC=108.141.179.115
+OVPN_SERVER1_IP_PRIVATE=10.0.0.68
+OVPN_SERVER2_NAME=Exos
+OVPN_SERVER2_IP_PUBLIC=2.3.4.5
+OVPN_SERVER2_IP_PRIVATE=10.0.0.69
+OVPN_SERVER3_NAME=Atimo
+OVPN_SERVER3_IP_PUBLIC=3.4.5.6
+OVPN_SERVER3_IP_PRIVATE=10.0.0.70
+
+# Optional: Port for Express server (default 8080)
+PORT=8080
+
+# Secret name for CA password in Azure Key Vault (used for certificate signing)
+EASYRSA_PASS_SECRET_NAME=ca-password
 ```
 
-## Installation
+**Note:** All secrets (SSH key, CA password) must be present in Azure Key Vault. The app uses Managed Identity for authentication.
+
+
+## Installation & Development
 
 1. Clone the repository
+2. `cd app`
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
+4. Copy and edit `.env.local` as needed for your environment.
+5. Start the server:
+   ```bash
+   npm start
+   ```
+   For development with auto-reload:
+   ```bash
+   npm run dev
+   ```
+
+The app will be available at `http://localhost:8080` (or your configured port).
 
 2. Install dependencies:
 
@@ -71,6 +112,16 @@ OVPN_SERVER3_IP=xxx.xxx.xxx.xxx
    ```bash
    npm start
    ```
+
+
+## Web UI & Real-Time Console
+
+- Modern responsive UI for generating OpenVPN profiles
+- Dropdown for server selection (populated from environment)
+- Live console output (WebSocket, color-coded, timestamped)
+- Input validation for CIDR and customer name
+- Download of generated `.ovpn` profile on success
+- Console auto-clears between operations
 
 ## API Endpoints
 
@@ -94,29 +145,29 @@ Response:
 - Success: OpenVPN configuration file (.ovpn)
 - Error: JSON object with error details
 
-## Security Features
 
-The application implements several security measures:
+## Azure Integration & Security Features
 
-- Azure Managed Identity authentication
-- Secure key storage in Azure Key Vault
-- SSH key-based authentication
-- Input validation for CIDR notation
+
+- Azure Managed Identity authentication (uses `@azure/identity`)
+- Secure key storage in Azure Key Vault (`@azure/keyvault-secrets`)
+- SSH key-based authentication to OpenVPN servers
+- All sensitive operations (SSH, CA signing) use secrets from Key Vault
+- Input validation for CIDR and customer name
 - Timeout handling for SSH commands
 
-## Architecture
 
-The application utilizes the following components:
+## Architecture
 
 - Express.js for the web server
 - Azure Identity for authentication
 - Azure Key Vault for secret management
 - SSH2 for remote server configuration
+- WebSocket for real-time console
 - Custom CIDR validation and network calculations
 
-## Error Handling
 
-The application includes comprehensive error handling for:
+## Error Handling
 
 - Invalid network configurations
 - SSH connection failures
@@ -124,26 +175,36 @@ The application includes comprehensive error handling for:
 - Certificate generation issues
 - Azure Key Vault access problems
 
+
 ## Logging
 
-Logs are stored in two locations:
-
-- Application logs via console.log
+- Application logs via `console.log` (server-side)
+- Real-time operation logs via WebSocket (browser console)
 - Operation logs in `/var/log/ovpnsetup/{customerName}.log` on the OpenVPN server
+
 
 ## Security Considerations
 
 1. Always use HTTPS in production
-2. Implement proper authentication for the web interface
-3. Regularly rotate SSH keys
+2. Implement authentication for the web interface (not included by default)
+3. Regularly rotate SSH keys and CA passwords
 4. Monitor Azure Key Vault access logs
 5. Keep OpenVPN and Easy-RSA up to date
+
+
+## Troubleshooting & Tips
+
+- If you see errors about missing secrets, check your Azure Key Vault and Managed Identity permissions.
+- For local development, ensure `.env.local` is present and correct.
+- The app logs all major steps to the browser console and server log for easier debugging.
+- For Azure deployment, ensure the app service has access to the Key Vault and the correct environment variables are set.
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Submit a pull request with a detailed description of changes
+
 
 ## License
 
