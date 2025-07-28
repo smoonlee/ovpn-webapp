@@ -22,7 +22,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT;
 const keyVaultUrl = `https://${process.env.KEY_VAULT_NAME}.vault.azure.net`;
 //const credential = new DefaultAzureCredential();
 const credential = new ManagedIdentityCredential(process.env.CLIENT_ID);
@@ -284,7 +284,7 @@ app.post("/connect", async (req, res) => {
     // Step 4: Generate new certificates
     broadcast("");
     broadcast("Generating certificates...");
-    await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-req ${customerName} nopass`);
+    await execCommand(conn, `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-req ${customerName} nopass`);
     
     // Retrieve the CA password from Azure Key Vault and sign the client certificate
     const caPasswordSecretName = process.env.CA_PASSWORD;
@@ -292,7 +292,7 @@ app.post("/connect", async (req, res) => {
     const caPassword = caPasswordSecret.value || "";
     await execCommand(
       conn,
-      `cd /etc/openvpn/easy-rsa && echo '${caPassword}' | sudo ./easyrsa --batch sign-req client ${customerName}`
+      `cd /etc/openvpn/easy-rsa && echo '${caPassword}' | ./easyrsa --batch sign-req client ${customerName}`
     );
 
     // Step 5: Create CCD profile (refactored to avoid heredoc)
