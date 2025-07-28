@@ -342,9 +342,9 @@ app.post("/connect", async (req, res) => {
     // Step 7: Collect certificates and keys
     // Parallelize certificate/key retrieval for performance
     const [caCert, clientCertRaw, clientKey] = await Promise.all([
-      execCommand(conn, `sudo cat /etc/openvpn/easy-rsa/pki/ca.crt`),
-      execCommand(conn, `sudo cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`),
-      execCommand(conn, `sudo cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`)
+      execCommand(conn, `cat /etc/openvpn/easy-rsa/pki/ca.crt`),
+      execCommand(conn, `cat /etc/openvpn/easy-rsa/pki/issued/${customerName}.crt`),
+      execCommand(conn, `cat /etc/openvpn/easy-rsa/pki/private/${customerName}.key`)
     ]);
     // Extract only the certificate block
     const certMatch = clientCertRaw.match(

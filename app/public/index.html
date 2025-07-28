@@ -26,11 +26,11 @@
               const pad = n => n.toString().padStart(2, '0');
               formatted = `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()}, ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} GMT`;
             }
-          } catch {}
-          document.getElementById('bootValue').textContent = formatted;
-        })
-        .catch(() => {
-          document.getElementById('bootValue').textContent = 'unavailable';
+            } catch {}
+            const bootValueElem = document.getElementById('bootValue');
+          })
+          .catch(() => {
+            document.getElementById('bootValue').textContent = 'unavailable';
         });
       </script>
       <p></p>
