@@ -90,15 +90,11 @@ app.get("/api/servers", (req, res) => {
   res.json(serverList);
 });
 
-// App boot timestamp endpoint (always GMT)
+// App boot timestamp endpoint (always UTC/ISO8601)
 const BOOT_TIMESTAMP = new Date();
 
 app.get("/api/boot-timestamp", (req, res) => {
-  const bstTime = BOOT_TIMESTAMP.toLocaleString("en-GB", {
-    timeZone: "Europe/London",
-    hour12: false,
-  });
-  res.type("text/plain").send(bstTime);
+  res.type("text/plain").send(BOOT_TIMESTAMP.toISOString());
 });
 
 // =========================
