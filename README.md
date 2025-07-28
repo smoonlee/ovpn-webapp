@@ -43,42 +43,35 @@ A Node.js web application for managing OpenVPN client configurations and certifi
 
 ## Environment Variables
 
-Copy `.env.local` from `app/` as a template for your environment variables. Example:
+Copy and rename `app/.env.local.sample` to `app/.env.local`, then fill in the values for your environment. This sample file contains all required variables, including:
 
-
-```env
-# Azure Key Vault name (without https:// and .vault.azure.net)
-KEY_VAULT_NAME=your-keyvault-name
-
-# Client ID for Managed Identity (optional, used for user-assigned identities)
-CLIENT_ID=
-
-# SSH secret name stored in Key Vault
-SSH_SECRET_NAME=ssh-private-key
-
-# SSH username for connecting to OpenVPN server
-SSH_USERNAME=appsvc_ovpn
-
-# OpenVPN server IPs and names for frontend dropdown
-OVPN_SERVER1_NAME=Matrix
-OVPN_SERVER1_IP_PUBLIC=108.141.179.115
-OVPN_SERVER1_IP_PRIVATE=10.0.0.68
-OVPN_SERVER2_NAME=Exos
-OVPN_SERVER2_IP_PUBLIC=2.3.4.5
-OVPN_SERVER2_IP_PRIVATE=10.0.0.69
-OVPN_SERVER3_NAME=Atimo
-OVPN_SERVER3_IP_PUBLIC=3.4.5.6
-OVPN_SERVER3_IP_PRIVATE=10.0.0.70
-
-# Optional: Port for Express server (default 8080)
-PORT=8080
-
-# Secret name for CA password in Azure Key Vault (used for certificate signing)
-CA_PASSWORD=ca-password
-```
+- Express server port
+- Azure Key Vault name and Managed Identity client ID
+- Secret names for SSH key and CA password
+- OpenVPN server names and IPs (public/private)
+- SSH username
 
 **Note:** All secrets (SSH key, CA password) must be present in Azure Key Vault. The app uses Managed Identity for authentication.
 
+## Documentation
+
+- [docs/server-js-breakdown.md](docs/server-js-breakdown.md): Technical breakdown of the main server logic, workflow, and security practices.
+
+## Server Workflow & Security Summary
+
+The server automates the full lifecycle of OpenVPN client certificate management and profile generation:
+
+- Validates and sanitizes all user input (customer name, CIDR, etc.)
+- Retrieves secrets (SSH key, CA password) securely from Azure Key Vault
+- Connects to OpenVPN servers via SSH using managed identities
+- Revokes and cleans up previous client configuration if it exists
+- Generates new certificates and CCD profiles for each client
+- Adds required routes to the VPN interface
+- Collects and assembles all certificates and keys into a downloadable `.ovpn` profile
+- Provides real-time operation feedback to the web UI via WebSocket
+- Implements strict error handling and detailed logging for troubleshooting
+
+See the [server.js Breakdown](docs/server-js-breakdown.md) for a full explanation of each step and the security best practices followed.
 
 ## Installation & Development
 
