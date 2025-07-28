@@ -285,7 +285,15 @@ app.post("/connect", async (req, res) => {
     broadcast("");
     broadcast("Generating certificates...");
     await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-req ${customerName} nopass`);
-    await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch sign-req client ${customerName}`);
+    
+    // Retrieve the CA password from Azure Key Vault and sign the client certificate
+    const caPasswordSecretName = process.env.CA_PASSWORD;
+    const caPasswordSecret = await secretClient.getSecret(caPasswordSecretName);
+    const caPassword = caPasswordSecret.value || "";
+    await execCommand(
+      conn,
+      `cd /etc/openvpn/easy-rsa && echo '${caPassword}' | sudo ./easyrsa --batch sign-req client ${customerName}`
+    );
 
     // Step 5: Create CCD profile (refactored to avoid heredoc)
     broadcast("Creating CCD profile...");
@@ -366,7 +374,18 @@ app.post("/connect", async (req, res) => {
 
   } catch (err) {
     console.error("[Error]", err);
-    res.status(500).json({ error: "Failed to connect", details: err.message });
+    // Provide more detailed error context
+    let errorContext = {};
+    if (err instanceof Error) {
+      errorContext = {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+      };
+    } else {
+      errorContext = { message: String(err) };
+    }
+    res.status(500).json({ error: errorContext.message || "Unknown error", details: errorContext });
   }
 });
 
