@@ -276,9 +276,9 @@ app.post("/connect", async (req, res) => {
       const caPasswordSecret = await secretClient.getSecret(caPasswordSecretName);
       const caPassword = caPasswordSecret.value || "";
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && echo '${caPassword}' | ./easyrsa --batch revoke '${customerName}'`);
-      
+
       await execCommand(conn, broadcastEcho(`Certificate for ${customerName} revoked`));
-      await execCommand(conn, `cd /etc/openvpn/easy-rsa && ./easyrsa --batch gen-crl`);
+      await execCommand(conn, `cd /etc/openvpn/easy-rsa && echo '${caPassword}' | ./easyrsa --batch gen-crl`);
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`);
       await execCommand(conn, broadcastEcho(`Removed keys and certificates for ${customerName}`));
 
