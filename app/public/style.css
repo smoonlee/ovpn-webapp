@@ -1,3 +1,23 @@
+/* Main title spacing */
+.main-title {
+  margin-bottom: 0.2em;
+}
+
+/* Boot timestamp container styling */
+.boot-timestamp {
+  font-size: 0.95em;
+  color: #888;
+  margin-bottom: 0.5em;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding-left: 5px;
+}
+
+/* Boot timestamp value monospace */
+.boot-value {
+  font-family: monospace;
+}
 /* Box-sizing reset for all elements */
 *, *::before, *::after {
   box-sizing: border-box;

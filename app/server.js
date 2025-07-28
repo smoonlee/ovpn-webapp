@@ -90,6 +90,17 @@ app.get("/api/servers", (req, res) => {
   res.json(serverList);
 });
 
+// App boot timestamp endpoint (always GMT)
+const BOOT_TIMESTAMP = new Date();
+
+app.get("/api/boot-timestamp", (req, res) => {
+  const bstTime = BOOT_TIMESTAMP.toLocaleString("en-GB", {
+    timeZone: "Europe/London",
+    hour12: false,
+  });
+  res.type("text/plain").send(bstTime);
+});
+
 // =========================
 // Utility Functions
 // =========================
@@ -268,12 +279,14 @@ app.post("/connect", async (req, res) => {
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo ./easyrsa --batch gen-crl`);
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo rm -f pki/private/'${customerName}'.key pki/issued/'${customerName}'.crt pki/reqs/'${customerName}'.req`);
       await execCommand(conn, broadcastEcho(`Removed keys and certificates for ${customerName}`));
+
       if (ccdExists === "CCD_EXISTS") {
         await execCommand(conn, `sudo rm -f /etc/openvpn/ccd/'${customerName}'`);
         await execCommand(conn, broadcastEcho(`Removed CCD profile for ${customerName}`));
       } else {
         await execCommand(conn, broadcastEcho(`No CCD profile found for ${customerName}`));
       }
+
       await execCommand(conn, `sudo ip route del '${cust.network}/${bits}'`);
       await execCommand(conn, broadcastEcho(`Removed route for ${cust.network}/${bits} on tun0`));
       await execCommand(conn, `cd /etc/openvpn/easy-rsa && sudo chown -R '${process.env.SSH_USERNAME}': pki`);
@@ -297,9 +310,9 @@ app.post("/connect", async (req, res) => {
 
     // Step 5: Create CCD profile (refactored to avoid heredoc)
     broadcast("Creating CCD profile...");
-    await execCommand(conn, `echo 'ifconfig-push ${cust.network} ${cust.mask}' | sudo tee /etc/openvpn/ccd/${customerName}`);
+    await execCommand(conn, `echo 'ifconfig-push ${cust.network} ${cust.mask}' | tee /etc/openvpn/ccd/${customerName}`);
     broadcast(`Added ifconfig-push for: ${cust.network}/${bits}`);
-    await execCommand(conn, `echo 'push "route ${az.network} ${az.mask}"' | sudo tee -a /etc/openvpn/ccd/${customerName}`);
+    await execCommand(conn, `echo 'push "route ${az.network} ${az.mask}"' | tee -a /etc/openvpn/ccd/${customerName}`);
     broadcast(`Added push route for Azure subnet: ${az.network}/${bits}`);
 
     // Step 6: Add route to tun0
